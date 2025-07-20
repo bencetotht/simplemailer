@@ -1,8 +1,9 @@
 import { Injectable } from '@nestjs/common';
+import { MailJob } from './interfaces/mail';
 
 @Injectable()
 export class AppService {
-  getHello(): string {
-    return 'Hello World!';
+  async sendMail(data: MailJob): Promise<void> {
+    return;
   }
 }

@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = env("PRISMA_CLIENT_OUTPUT")
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// Accounts
+model Account {
+  id        String   @id @default(cuid())
+  name      String
+  username  String   @unique // App User / Email address
+  password  String // App Password
+  emailHost String // SMTP Host
+  emailPort Int // SMTP Port
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Log       Log[]
+}
+
+// Templates
+model Template {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  subject   String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  Log       Log[]
+}
+
+// Logs
+model Log {
+  id         String   @id @default(cuid())
+  accountId  String
+  account    Account  @relation(fields: [accountId], references: [id])
+  recipient  String
+  templateId String
+  template   Template @relation(fields: [templateId], references: [id])
+  values     Json     @default("{}")
+  status     Status   @default(PENDING)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
+enum Status {
+  PENDING
+  SENT
+  FAILED
+}
