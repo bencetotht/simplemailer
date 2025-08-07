@@ -1,0 +1,38 @@
+{
+  "name": "database",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "files": [
+    "generated/client/**/*",
+    "schema.prisma"
+  ],
+  "exports": {
+    ".": {
+      "import": "./generated/client/index.js",
+      "require": "./generated/client/index.js",
+      "types": "./generated/client/index.d.ts"
+    }
+  },
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "db:generate": "prisma generate --no-engine",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:studio": "prisma studio"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "packageManager": "pnpm@10.12.4",
+  "devDependencies": {
+    "@types/node": "^24.2.0",
+    "prisma": "catalog:prisma",
+    "tsx": "^4.20.3",
+    "typescript": "^5.9.2"
+  },
+  "dependencies": {
+    "@prisma/client": "6.13.0",
+    "@prisma/extension-accelerate": "^2.0.2"
+  }
+}

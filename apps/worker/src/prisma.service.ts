@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from 'database';
 
 @Injectable()
 export class PrismaService
@@ -26,7 +26,7 @@ export class PrismaService
   async onModuleInit() {
     try {
       await this.$connect();
-      this.logger.log('Successfully connected to primary database');
+      this.logger.log('Successfully connected to database');
     } catch (error) {
       this.logger.error('Failed to connect to databases:', error);
       throw error;
@@ -36,7 +36,7 @@ export class PrismaService
   async onModuleDestroy() {
     try {
       await this.$disconnect();
-      this.logger.log('Disconnected from primary database');
+      this.logger.log('Disconnected from database');
     } catch (error) {
       this.logger.error('Error during disconnect:', error);
     }
