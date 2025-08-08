@@ -1,13 +1,11 @@
 # simplemailer
 
 ## Todo
-- [ ] MJML rendering
-- [ ] S3 capability
-- [ ] REST API for triggering mail sending
+- [ ] Prometheus metric for sent mail / min
 - [ ] Custom subjects
 - [ ] Support for attachments
 - [ ] Support for react-mail
-- [ ] Prometheus metric for sent mail / min
+- [ ] Support for bulk mail sending / newsletters
 
 ## Architecture
 ```mermaid

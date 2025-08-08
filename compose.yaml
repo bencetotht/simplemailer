@@ -1,4 +1,5 @@
 services:
+
   rabbitmq:
     image: rabbitmq:4-management
     hostname: rabbitmq
@@ -23,3 +24,4 @@ services:
 
 volumes:
   postgres_data:
+  minio_data:

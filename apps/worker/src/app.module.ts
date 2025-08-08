@@ -6,6 +6,10 @@ import { DbService } from './db.service';
 import { S3Service } from './s3.service';
 import { TerminusModule } from '@nestjs/terminus';
 import { PrismaService } from './prisma.service';
+import { ApiController } from './api.controller';
+import { ApiService } from './api.service';
+import { QueueService } from './queue.service';
+import { ConfigParser } from './config.parser';
 
 @Module({
   imports: [
@@ -14,8 +18,8 @@ import { PrismaService } from './prisma.service';
     }), 
     MailerModule,
   ],
-  controllers: [QueueController],
-  providers: [AppService, DbService, S3Service, PrismaService],
+  controllers: [QueueController, ApiController],
+  providers: [AppService, DbService, S3Service, PrismaService, ApiService, QueueService, ConfigParser],
   exports: [S3Service, DbService],
 })
 export class AppModule {}

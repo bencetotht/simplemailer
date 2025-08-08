@@ -2,16 +2,25 @@ import { Injectable, Logger } from "@nestjs/common";
 import { Account, Template } from "database";
 import { MailJob } from "src/interfaces/mail";
 import { TemplateService } from "./template.service";
-import nodemailer, { Transporter } from "nodemailer";
+import { Transporter } from "nodemailer";
+const nodemailer = require('nodemailer').default || require('nodemailer');
+import { MailerError } from "./mailer.error";
+import { ValueError } from "src/value.error";
 
 @Injectable()
 export class MailService {
     private logger = new Logger('MailerService');
     constructor(private readonly templateService: TemplateService) {}
 
-    async sendMail(account: Account, template: Template, data: MailJob): Promise<boolean> {
-        const transporter = await this.initMail(account);
-        const compiled = await this.templateService.createMail(template, data.values);
+    async sendMail(account: Partial<Account>, template: Template, data: MailJob): Promise<void> {
+        let transporter: Transporter;
+        try {
+            transporter = await this.initMail(account);
+        }
+        catch(err) {
+            throw new ValueError(`Failed to initialize mailer: ${err}`);
+        }
+        const compiled = await this.templateService.createMail(template.id, data.values);
 
         const mailMessage = {
             from: account.username,
@@ -23,15 +32,15 @@ export class MailService {
 
         try {
             await transporter.sendMail(mailMessage);
-            this.logger.log(`Mail sent to ${data.recipient}: ${template.subject}`)
-            return true;
         }catch(err) {
-            this.logger.error(`Failed sending mail to: ${data.recipient}: ${err}`)
-            return false;
+            if (err.message.includes('ENOTFOUND')) { // if the base configuration is wrong, don't retry sending the mail
+                throw new ValueError(err);
+            }
+            throw new MailerError(err); // if other problem occours, retry sending the mail
         }
     }
 
-    private async initMail(account: Account): Promise<Transporter> {
+    private async initMail(account: Partial<Account>): Promise<Transporter> {
         return nodemailer.createTransport({
             host: account.emailHost,
             port: 465,

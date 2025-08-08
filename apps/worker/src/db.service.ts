@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
 import { MailJob } from "./interfaces/mail";
-import { Account, Log, Status } from "database";
+import { Account, Log, Status, Template } from "database";
 import { ValueError } from "./value.error";
 
 @Injectable()
@@ -49,18 +49,35 @@ export class DbService {
         }
     }
 
-    async getTemplateName(templateId: string): Promise<string> {
+    async getTemplate(templateId: string): Promise<Template> {
         try {
             const template = await this.prisma.template.findUnique({
                 where: { id: templateId },
-                select: { name: true },
             });
 
             if (!template) throw new ValueError(`Template with id ${templateId} not found`);
 
-            return template.name;
+            return template;
         } catch (error) {
-            throw new ValueError(`Failed to get template name for template with id ${templateId}: ${error}`);
+            throw new ValueError(`Failed to get template for template with id ${templateId}: ${error}`);
         }
+    }
+
+    async validateTemplate(templateId: string): Promise<void> {
+        const template = await this.prisma.template.findUnique({
+            where: { id: templateId },
+        });
+
+        if (!template) throw new ValueError(`Template with id ${templateId} not found`);
+        return;
+    }
+
+    async validateAccount(accountId: string): Promise<void> {
+        const account = await this.prisma.account.findUnique({
+            where: { id: accountId },
+        });
+
+        if (!account) throw new ValueError(`Account with id ${accountId} not found`);
+        return;
     }
 }

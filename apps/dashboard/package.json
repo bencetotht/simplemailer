@@ -9,8 +9,6 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "database": "workspace:*",
-    "@prisma/client": "^6.12.0",
     "@radix-ui/react-slot": "^1.2.3",
     "amqplib": "^0.10.8",
     "class-variance-authority": "^0.7.1",

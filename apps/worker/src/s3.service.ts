@@ -22,11 +22,12 @@ export class S3Service {
 
     async getTemplate(templateId: string): Promise<Readable> {
       try {
-        const templateName = await this.dbService.getTemplateName(templateId);
+        const res = await this.dbService.getTemplate(templateId);
+        const templateName = res.filename;
         const template = await this.minioClient.getObject(process.env.S3_BUCKET || '', templateName);
         return template;
       } catch(err) {
-        this.logger.error(`Failed to get template ${templateId}: ${err}`);
+        this.logger.error(err);
         throw err;
       }
     }

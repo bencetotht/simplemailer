@@ -1,0 +1,33 @@
+accounts:
+  - name: "Account 1"
+    username: "account1@example.com"
+    password: "password"
+    emailHost: "smtp.example.com"
+    emailPort: 587
+  - name: "Account 2"
+    username: "account2@example.com"
+    password: "my bad i forgot it"
+    emailHost: "smtp.example.com"
+    emailPort: 587
+
+buckets:
+  - name: "bucket1"
+    path: "bucket1"
+    accessKeyId: "accessKeyId"
+    secretAccessKey: "secretAccessKey"
+    region: "region"
+  - name: "bucket2"
+    path: "templates"
+    accessKeyId: "accessKeyId"
+    secretAccessKey: "secretAccessKey"
+    region: "region"
+
+templates:
+  - name: "Template 1"
+    subject: "Template 1 Subject"
+    filename: "template1.mjml"
+    bucketId: "bucket1"
+    storageType: "S3"
+  - name: "Template 2"
+    subject: "Template 2 Subject"
+    filename: "template2.mjml"

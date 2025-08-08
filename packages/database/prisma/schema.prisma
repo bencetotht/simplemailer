@@ -15,7 +15,7 @@ model Account {
   username  String   @unique // App User / Email address
   password  String // App Password
   emailHost String // SMTP Host
-  emailPort Int // SMTP Port
+  emailPort Int @default(587) // SMTP Port
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   Log       Log[]
@@ -26,9 +26,26 @@ model Template {
   id        String   @id @default(cuid())
   name      String   @unique
   subject   String
+  filename  String
+  storageType STORAGE_TYPE @default(LOCAL)
+  Log       Log[]
+  Bucket    Bucket?   @relation(fields: [bucketId], references: [id])
+  bucketId  String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
-  Log       Log[]
+}
+
+// Buckets
+model Bucket {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  path      String
+  accessKeyId String
+  secretAccessKey String
+  region String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  templates Template[]
 }
 
 // Logs
@@ -45,8 +62,14 @@ model Log {
   updatedAt  DateTime @updatedAt
 }
 
+enum STORAGE_TYPE {
+  S3
+  LOCAL
+}
+
 enum Status {
   PENDING
   SENT
   FAILED
+  RETRYING
 }

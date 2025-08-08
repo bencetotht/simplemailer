@@ -1,28 +1,39 @@
 import { BadRequestException, Injectable } from '@nestjs/common';
 import { readFile } from 'fs/promises';
-import mjml from 'mjml';
+const mjml = require('mjml').default || require('mjml');
 import Handlebars from 'handlebars';
 import { Template } from 'database';
-import { S3Service } from 'src/s3.service';
+import { DbService } from 'src/db.service';
+import * as fs from 'fs';
+import { ValueError } from 'src/value.error';
 
 @Injectable()
 export class TemplateService {
-  constructor(
-    // private readonly s3: S3Service,
-  ) {}
+  constructor(private readonly dbService: DbService) {}
 
-  createMail = async (template: Template, values: Record<string, string>): Promise<{ html: string; json: any; errors: any[] }> => {
-    // // const mailFile = await this.s3.getTemplate(template.id) as unknown as string;
-    // const compiled = mjml(mailFile, {
-    //   preprocessors: [
-    //     (rawMjml) => {
-    //       const filler = Handlebars.compile(rawMjml);
-    //       const filled = filler(values);
-    //       return filled;
-    //     },
-    //   ],
-    // });
-    // return compiled;
-    return {html: '', json: {}, errors: []};
+  createMail = async (templateId: string, values: Record<string, any>): Promise<{ html: string; json: any; errors: any[] }> => {
+    const template: string = await this.getTemplate(templateId);
+    const compiled = mjml(template, {
+      preprocessors: [
+        (rawMjml) => {
+          const filler = Handlebars.compile(rawMjml);
+          const filled = filler(values);
+          return filled;
+        },
+      ],
+    });
+    return compiled;
   };
+
+  getTemplate = async (templateId: string): Promise<string> => {
+    const template = await this.dbService.getTemplate(templateId);
+    if (template.storageType == 'S3') {
+      // return await this.s3Service.getTemplate(template.filename);
+      return '';
+    } else if (template.storageType == 'LOCAL') {
+      return fs.readFileSync(`../../templates/${template.filename}`, 'utf8'); // TODO: change to env variable
+    } else {
+      throw new ValueError('Invalid template storage type');
+    }
+  }
 }
