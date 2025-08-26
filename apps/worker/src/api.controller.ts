@@ -25,7 +25,7 @@ export class ApiController {
 
     // Get Logs
     @Get('logs')
-    public async getLogs(@Query('limit') limit: number = 10): Promise<Log[]> {
+    public async getLogs(@Query('limit') limit: number = 10): Promise<Partial<Log>[]> {
         return await this.apiService.getLogs(limit);
     }
 

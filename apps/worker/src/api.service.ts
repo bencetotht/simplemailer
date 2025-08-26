@@ -6,6 +6,7 @@ import { MailJob } from "./interfaces/mail";
 import { QueueService } from "./queue.service";
 import * as fs from 'fs';
 import { ValueError } from "./value.error";
+
 @Injectable()
 export class ApiService {
   constructor(private readonly prisma: PrismaService, private readonly queueService: QueueService) {}
@@ -16,12 +17,30 @@ export class ApiService {
   }
 
   // Logs
-  public async getLogs(limit: number = 10): Promise<Log[]> {
+  public async getLogs(limit: number = 10): Promise<Partial<Log>[]> {
     return await this.prisma.log.findMany({
       orderBy: {
         createdAt: 'desc',
       },
       take: limit,
+      select: {
+        id: true,
+        recipient: true,
+        status: true,
+        createdAt: true,
+        account: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+        template: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
+      },
     });
   }
 

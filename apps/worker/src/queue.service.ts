@@ -41,22 +41,27 @@ export class QueueService implements OnModuleInit {
   // }
 
   public async getQueue(queue: string, limit: number = 10): Promise<Record<string, any>[]> {
-    const auth = Buffer.from('root:root').toString('base64');
-    const response = await fetch(`${process.env.RABBITMQ_URL}/api/queues/%2f/${queue}/get`, {
-        method: 'POST',
-        headers: {
-          Authorization: `Basic ${auth}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          count: limit,
-          ackmode: 'ack_requeue_true',
-          encoding: 'auto',
-          truncate: 50000,
-        }),
-      });
-    const messages = await response.json();
-    return messages;
+    try {
+      const auth = Buffer.from('root:root').toString('base64');
+      const response = await fetch(`${process.env.RABBITMQ_API_URL}/api/queues/%2f/${queue}/get`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Basic ${auth}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            count: limit,
+            ackmode: 'ack_requeue_true',
+            encoding: 'auto',
+            truncate: 50000,
+          }),
+        });
+      const messages = await response.json();
+      return messages;
+    } catch (error) {
+      this.logger.error("Error getting queue:", error);
+      return []
+    }
   }
 
   public async addToQueue(queue: string, data: MailJob): Promise<{success: boolean, message: string}> {

@@ -10,6 +10,8 @@ import { ApiController } from './api.controller';
 import { ApiService } from './api.service';
 import { QueueService } from './queue.service';
 import { ConfigParser } from './config.parser';
+import { WebsocketGateway } from './websocket.gateway';
+import { CustomLogger } from './custom.logger';
 
 @Module({
   imports: [
@@ -19,7 +21,7 @@ import { ConfigParser } from './config.parser';
     MailerModule,
   ],
   controllers: [QueueController, ApiController],
-  providers: [AppService, DbService, S3Service, PrismaService, ApiService, QueueService, ConfigParser],
-  exports: [S3Service, DbService],
+  providers: [AppService, DbService, S3Service, PrismaService, ApiService, QueueService, ConfigParser, WebsocketGateway, CustomLogger],
+  exports: [S3Service, DbService, CustomLogger],
 })
 export class AppModule {}

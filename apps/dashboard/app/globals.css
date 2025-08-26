@@ -120,3 +120,27 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Theme transition support */
+* {
+  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+}
+
+/* Ensure proper contrast in both themes */
+.dark .bg-card {
+  @apply bg-card/80;
+}
+
+.dark .bg-sidebar {
+  @apply bg-sidebar/95;
+}
+
+/* Enhanced dark mode sidebar */
+.dark .border-sidebar-border {
+  @apply border-sidebar-border/20;
+}
+
+/* Smooth theme switching */
+.theme-transition {
+  transition: all 0.3s ease;
+}
