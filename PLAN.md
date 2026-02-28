@@ -1,204 +1,145 @@
-# SimpleMailer Modernization Plan
+# SimpleMailer Stabilization + Modernization Plan
 
-## Context
+Last updated: 2026-02-28
 
-SimpleMailer is a microservice-based email sending platform. Currently it's a pnpm monorepo (`apps/dashboard`, `apps/worker`, `packages/database`) where the NestJS worker acts as a monolith — owning all REST API endpoints, database access, WebSocket server, Prometheus metrics, config seeding, AND queue consumption. The Next.js dashboard is a thin client calling the worker's HTTP API. This architecture makes the worker stateful and tightly coupled, defeating the goal of independent, scalable workers.
+## Current state (validated from repository)
 
-**Goals:**
-1. Convert to bun + turborepo monorepo
-2. Move all API/DB/state logic to Next.js — worker becomes purely stateless
-3. Evaluate Convex vs keeping PostgreSQL
-4. Improve observability (OpenTelemetry)
-5. Improve reliability (circuit breakers, backoff, DLX)
+The existing plan direction is mostly right, but several "done" items are not actually done yet.
 
----
+### Confirmed issues
+- `bun run build` fails in `apps/worker` due to broken Prisma type resolution.
+  - `apps/worker/tsconfig.json` maps `@prisma/client` to `../prisma/generated/client`, which does not exist in this repo layout.
+- `bun run type-check` fails for the same reason (`Account`, `Template`, `Status` etc. not found).
+- Monorepo migration is partial: app-level lockfiles still exist.
+  - `apps/dashboard/pnpm-lock.yaml`
+  - `apps/dashboard/package-lock.json`
+  - `apps/worker/pnpm-lock.yaml`
+- `bun run lint` fails because `apps/dashboard` has no committed ESLint config and `next lint` prompts interactively.
+- API migration to Next.js has not started yet (no `apps/dashboard/app/api/*` routes).
+- Worker still mixes many concerns (HTTP API, queue consuming, DB access, metrics, websocket, config parsing).
 
-## Step 1: Monorepo Conversion (bun + turborepo) ✅ DONE
+## North-star goals
+1. Keep bun + turborepo monorepo and make it reliable (`build`/`type-check`/`lint` green).
+2. Move dashboard-facing API responsibilities to Next.js.
+3. Make worker stateless for mail execution and queue consumption.
+4. Keep PostgreSQL + Prisma for now (Convex is optional, not urgent).
+5. Add production-grade reliability and observability.
 
-### What was changed
-- `/package.json` — rewritten with bun workspaces, turbo scripts, `packageManager: bun@1.3.9`
-- `/turbo.json` — created with task pipeline definitions
-- `/pnpm-workspace.yaml` — deleted
-- `/pnpm-lock.yaml` — deleted
-- `/packages/database/package.json` — removed `packageManager`, replaced `catalog:prisma` with `^6.13.0`, added `clean` script
-- `/apps/dashboard/package.json` — added `type-check`, `clean` scripts
-- `/apps/worker/package.json` — added `dev`, `type-check`, `clean` scripts
+## Phase 0: Stabilize baseline first (must complete before feature migration)
 
-### Verification
-- `bun install` — generates `bun.lock`
-- `bun run db:generate` — Prisma client via turborepo
-- `bun run dev` — both apps start (dashboard on 3001, worker on 3000)
-- `bun run build` — builds all packages in correct dependency order
+### Scope
+- Fix Prisma typing in worker.
+  - Remove incorrect `@prisma/client` path alias in `apps/worker/tsconfig.json`, or correctly point worker to shared `packages/database` exports.
+- Make monorepo package-manager state consistent.
+  - Remove stale `pnpm-lock.yaml` and `package-lock.json` files inside apps.
+- Make lint non-interactive and reproducible.
+  - Commit dashboard ESLint config and ensure `bun run lint` runs in CI without prompts.
+- Update docs/scripts to bun+turborepo reality.
+  - Remove stale Next boilerplate README instructions in `apps/dashboard/README.md`.
 
----
+### Exit criteria
+- `bun run db:generate` succeeds.
+- `bun run type-check` succeeds.
+- `bun run build` succeeds.
+- `bun run lint` succeeds non-interactively.
 
-## Phase A: Move API to Next.js
+## Phase A: API migration to Next.js (dashboard-facing only)
 
-**What**: Migrate all REST endpoints from `apps/worker/src/api.controller.ts` + `api.service.ts` to Next.js App Router API routes. Dashboard gets direct DB access via `packages/database`.
+Move REST endpoints currently in `apps/worker/src/api.controller.ts` + `api.service.ts` to Next.js route handlers under `apps/dashboard/app/api`.
 
-### New API routes in `apps/dashboard/app/api/`
+### API parity routes
+- `GET /api/health`
+- `GET /api/jobs`
+- `GET /api/logs`
+- `POST /api/send`
+- `GET|POST /api/account`
+- `GET|POST /api/bucket`
+- `GET /api/template`
+- `GET /api/template/:id`
 
-| Route file | Methods | Replaces |
-|---|---|---|
-| `health/route.ts` | GET | `/api/health` |
-| `logs/route.ts` | GET | `/api/logs` |
-| `jobs/route.ts` | GET | `/api/jobs` |
-| `send/route.ts` | POST | `/api/send` |
-| `accounts/route.ts` | GET, POST | `/api/account` |
-| `buckets/route.ts` | GET, POST | `/api/bucket` |
-| `templates/route.ts` | GET | `/api/template` |
-| `templates/[id]/route.ts` | GET | `/api/template/:id` |
-| `events/route.ts` | GET (SSE) | WebSocket log streaming |
-| `admin/seed/route.ts` | POST | Config seeding (from `config.parser.ts`) |
-| `admin/dead-letters/route.ts` | GET, POST | Dead letter inspection/reprocessing |
-| `metrics/route.ts` | GET | Prometheus `/metrics` |
+Note: keep current singular route names first for compatibility (`account`, `bucket`, `template`), then add plural aliases later if desired.
 
-### New utilities in `apps/dashboard/lib/`
-- `rabbitmq.ts` — singleton amqp-connection-manager connection + channel
-- `seed.ts` — config.yaml parser (moved from worker's `config.parser.ts`)
-- `backoff.ts` — exponential backoff with jitter utility
+### App changes
+- Switch `apps/dashboard/lib/api.ts` base URL from `http://localhost:3000/api` to `/api`.
+- Keep UI pages functional without mock data (`jobs/page.tsx` currently uses static mock jobs).
+- Add shared input validation for API payloads (zod or class-validator equivalent at the API edge).
 
-### Dashboard frontend changes
-- `apps/dashboard/lib/api.ts` — change base URL from `http://localhost:3000/api` to `/api`
-- Replace `hooks/use-websocket.ts` with `hooks/use-sse.ts` (Server-Sent Events instead of Socket.IO)
-- Fix jobs page to use real API instead of mock data
+### Deferred in this phase
+- Do not move long-running queue consumers to Next.js runtime.
+- Do not remove worker queue processing yet.
 
-### Worker files to delete after migration
-- `apps/worker/src/api.controller.ts`, `api.service.ts`
-- `apps/worker/src/websocket.gateway.ts`, `custom.logger.ts`
-- `apps/worker/src/config.parser.ts`, `config.error.ts`
-- `apps/worker/src/prometheus.service.ts`
-- `apps/worker/src/prisma.service.ts`, `db.service.ts`
-- `apps/worker/prisma/` (entire duplicate schema directory)
+## Phase B: Worker simplification (stateless execution service)
 
----
+### Target responsibility of worker
+- Consume queue messages.
+- Compile template.
+- Send SMTP email.
+- Emit result/log events.
 
-## Phase B: Make Worker Stateless
+### Important architecture correction
+Retries and queue orchestration should stay in a long-running worker process (or dedicated orchestrator service), not in Next.js route handlers. Next.js is request-oriented and is not a reliable primary home for background consumers.
 
-**Fat message format** — the API resolves all references before publishing:
-```typescript
-interface MailQueueMessage {
-  jobId: string;              // Log entry ID for status tracking
-  correlationId: string;      // For distributed tracing
-  smtp: { host, port, secure, username, password };
-  email: { from, to, subject, templateContent, values };
-  retry: { maxRetries, currentAttempt, backoffBaseMs };
-}
-```
+### Implementation approach
+- First remove worker HTTP API/websocket features after Phase A parity is confirmed.
+- Keep worker as NestJS initially to reduce migration risk.
+- Optional Phase B2: rewrite worker as plain Bun service after behavior parity and test coverage.
 
-**Worker rewrite — plain bun worker (drop NestJS entirely):**
-- No framework overhead — just amqplib + nodemailer + mjml + handlebars
-- Minimal, fast-starting, tiny footprint — ideal for stateless horizontal scaling
-- Consumes from `mailer` queue, sends email, publishes result to `mailer.results`
+## Phase C: Data layer consolidation
 
-**Result message published back to Next.js:**
-```typescript
-interface MailResultMessage {
-  jobId: string;
-  status: "SENT" | "FAILED";
-  error?: string;
-  attempt: number;
-}
-```
+### Keep PostgreSQL + Prisma (recommended)
+Reasons:
+- Existing schema and data model already fit the product.
+- Self-hosted stack consistency.
+- Lower migration risk while API/worker boundaries are still changing.
 
-**Retry ownership moves to Next.js API:**
-- Worker tries once per message. On failure → publishes FAILED to `mailer.results`
-- Next.js result consumer checks retry count, calculates backoff with jitter, re-publishes to `mailer` queue with delay (via RabbitMQ delayed message exchange plugin)
+### Required DB work
+- Consolidate on `packages/database/prisma/schema.prisma` as single source of truth.
+- Remove/retire duplicate schema at `apps/worker/prisma/schema.prisma` once worker no longer owns schema generation.
+- Add dashboard query index improvements (for example on `Log(createdAt)` and optional `Log(status, createdAt)`).
+- Consider extending `Log` with retry metadata:
+  - `retryCount`
+  - `lastError`
+  - `completedAt`
 
-**Final worker structure:**
-```
-apps/worker/
-  src/
-    index.ts           — entry point: connect to RabbitMQ, consume messages
-    consumer.ts        — message handler: validate, compile template, send, publish result
-    mailer.ts          — nodemailer SMTP sending
-    template.ts        — MJML + Handlebars compilation
-    publisher.ts       — publish results to mailer.results queue
-    types.ts           — MailQueueMessage, MailResultMessage interfaces
-    logger.ts          — structured pino logger
-    circuit-breaker.ts — opossum circuit breaker for SMTP
-  package.json
-  tsconfig.json
-```
+## Phase D: Reliability hardening
 
-Worker dependencies: `amqplib`, `amqp-connection-manager`, `nodemailer`, `mjml`, `handlebars`, `pino`, `opossum`.
+### Queue/retry
+- Implement one retry strategy cleanly:
+  - RabbitMQ delayed exchange plugin, or
+  - TTL + DLX pattern
+- Remove current ambiguous retry path (for example `x-delay` header usage without guaranteed delayed exchange config).
+- Add idempotency key/correlation ID per job for safe retries.
 
----
+### Failure handling
+- Dead letter queue + admin reprocess endpoint.
+- Circuit breaker around SMTP provider operations.
+- Graceful shutdown for consumers (stop consume, drain, close channels).
 
-## Phase C: Database Decision
+### Security/control plane
+- Replace hardcoded RabbitMQ credentials/hosts with strict env-based config.
+- Add auth for send/admin endpoints (API key or session-based admin auth).
+- Add rate limiting for `POST /api/send`.
 
-**Recommendation: Keep PostgreSQL + Prisma.** Reasons:
-- Already working schema with migrations
-- Self-hosted, matching the rest of the stack (RabbitMQ, S3/MinIO)
-- Convex adds cloud vendor lock-in to an otherwise fully self-hostable system
-- Real-time updates achievable with SSE without Convex
-- After Phase B, only Next.js touches the DB — swapping later is contained
+## Phase E: Observability
 
-**Improvements to make:**
-- Consolidate to single schema in `packages/database/prisma/schema.prisma`
-- Add composite index on `Log(status, createdAt)` for dashboard queries
-- Use Prisma Accelerate or PgBouncer for connection pooling in production
-- Consider adding `retryCount`, `lastError`, `completedAt` fields to Log model
+### Logging
+- Replace ad-hoc logger + websocket log coupling with structured logs (`pino`).
+- Ensure correlation IDs flow API -> queue -> worker -> DB log entry.
 
----
+### Tracing/metrics
+- Add OpenTelemetry traces for API handlers, queue publish/consume, SMTP send.
+- Keep Prometheus-compatible metrics export (OTel can coexist; no forced replacement required).
+- Add collector in `compose.yaml` only after local instrumentation is verified.
 
-## Phase D: Observability (OpenTelemetry)
+## Recommended execution order
+1. Phase 0 (stabilize baseline and tooling correctness)
+2. Phase A (dashboard-facing API migration with parity)
+3. Phase B (remove worker HTTP/websocket responsibilities)
+4. Phase C (finalize single Prisma ownership + indexes)
+5. Phase D and Phase E in parallel after A+B are stable
 
-**Dependencies:** `@opentelemetry/sdk-node`, `@opentelemetry/auto-instrumentations-node`, OTLP exporters. Optionally create `packages/telemetry` shared config.
-
-**Instrumentation:**
-- Next.js: native `instrumentation.ts` hook (built-in support)
-- Worker: loaded via `--require` flag
-- Auto-instrument: HTTP, Prisma (`@prisma/instrumentation`), amqplib
-- Custom spans: SMTP send, template compilation
-
-**Structured logging:** Replace NestJS Logger + CustomLogger with `pino` (JSON output). Correlation IDs propagated from API → queue message → worker.
-
-**Metrics (OTel native, replaces Prometheus):**
-- `mailer.emails.sent`, `.failed`, `.retry` (counters)
-- `mailer.queue.depth` (gauge)
-- `mailer.email.send_duration` (histogram)
-
-**Infrastructure addition to `compose.yaml`:** OpenTelemetry Collector + Jaeger (or Grafana Tempo) for trace visualization.
-
----
-
-## Phase E: Reliability Improvements
-
-**Circuit breakers** (using `opossum` library):
-- SMTP connections in worker (`apps/worker/src/circuit-breaker.ts`) — open circuit after 5 consecutive failures per SMTP host
-- RabbitMQ publishing in Next.js — return 503 if RabbitMQ is down
-- DB queries — prevent cascade failures
-
-**Exponential backoff with jitter:**
-```typescript
-function backoff(attempt: number, baseMs = 1000, maxMs = 60000): number {
-  const exp = baseMs * Math.pow(2, attempt);
-  const capped = Math.min(exp, maxMs);
-  return Math.floor(capped * (0.5 + Math.random() * 0.5));
-}
-```
-
-**Dead letter exchange:**
-- `mailer.dlx` exchange + `mailer.dead-letters` queue
-- Messages nacked without requeue go to dead letters
-- Admin endpoint for inspection/reprocessing
-
-**RabbitMQ delayed message exchange plugin** for timed retries.
-
-**Graceful shutdown:** SIGTERM handler in worker — cancel consumer, drain in-flight messages, close AMQP connection, exit.
-
-**Rate limiting:** Next.js middleware on `POST /api/send` (per API key/IP).
-
-**Authentication:** API key system for tenants hitting `POST /api/send`. Admin auth for dashboard access.
-
----
-
-## Implementation Order
-
-1. **Step 1: Monorepo conversion** ✅ DONE
-2. **Phase A: Move API to Next.js** — next priority
-3. **Phase B: Make worker stateless** — depends on A
-4. **Phase C: DB improvements** — alongside A/B
-5. **Phase E: Reliability** — after A+B complete
-6. **Phase D: Observability** — can parallel with E
+## Short recommendation summary
+- Treat the previous "Step 1 done" claim as partial, not complete.
+- Do not place core retry/result consumers inside Next.js request runtime.
+- Prioritize green build/type/lint before architecture refactors.
+- Keep PostgreSQL/Prisma for now; revisit Convex only after boundaries stabilize.
