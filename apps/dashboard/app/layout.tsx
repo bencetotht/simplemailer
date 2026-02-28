@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PageSideBar } from "@/components/pageSideBar";
-import { SidebarInset, SidebarTrigger, SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarTrigger, SidebarProvider } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { ConnectionStatus } from "@/components/connection-status";

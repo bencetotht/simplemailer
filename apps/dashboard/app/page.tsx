@@ -1,12 +1,12 @@
 'use client';
 
 import { Button } from "@/components/ui/button";
-import { LogTable } from "@/components/logTable";
+import { LogTable, type LogEntry } from "@/components/logTable";
 import { useEffect, useState } from "react";
 import { getLogs } from "@/lib/api";
 
 export default function Home() {
-  const [logs, setLogs] = useState<any[]>([]);
+  const [logs, setLogs] = useState<Partial<LogEntry>[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   
   const getInformation = async () => {

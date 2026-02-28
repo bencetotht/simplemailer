@@ -1,15 +1,22 @@
-import {  Injectable } from "@nestjs/common";
-import { PrismaService } from "./prisma.service";
-import { Account, Bucket, Log, Template } from "@prisma/client";
-import { AccountValidator, BucketValidator, MailJobValidator } from "./interfaces/validator";
-import { MailJob } from "./interfaces/mail";
-import { QueueService } from "./queue.service";
+import { Injectable } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
+import { Account, Bucket, Log, Template } from 'database';
+import {
+  AccountValidator,
+  BucketValidator,
+  MailJobValidator,
+} from './interfaces/validator';
+import { MailJob } from './interfaces/mail';
+import { QueueService } from './queue.service';
 import * as fs from 'fs';
-import { ValueError } from "./value.error";
+import { ValueError } from './value.error';
 
 @Injectable()
 export class ApiService {
-  constructor(private readonly prisma: PrismaService, private readonly queueService: QueueService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly queueService: QueueService,
+  ) {}
 
   // Jobs
   public async getJobs(): Promise<Record<string, any>[]> {
@@ -45,12 +52,16 @@ export class ApiService {
   }
 
   // Mail
-  public async sendMail(data: MailJobValidator): Promise<{ success: boolean; message: string; }> {
+  public async sendMail(
+    data: MailJobValidator,
+  ): Promise<{ success: boolean; message: string }> {
     return await this.queueService.addToQueue('mailer', data);
   }
 
   // Accounts
-  public async createAccount(data: AccountValidator): Promise<{success: boolean, message: string}> {
+  public async createAccount(
+    data: AccountValidator,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const result = await this.prisma.account.create({
         data,
@@ -69,26 +80,30 @@ export class ApiService {
   }
 
   public async getAccount(id: string): Promise<Partial<Account>[]> {
-    return id != undefined ? await this.prisma.account.findMany({
-      where: { id },
-      select: {
-        id: true,
-        name: true,
-        username: true,
-        emailHost: true,
-        createdAt: true,
-      },
-    }) : await this.prisma.account.findMany({
-      select: {
-        id: true,
-        name: true,
-        username: true,
-      },
-    });
+    return id != undefined
+      ? await this.prisma.account.findMany({
+          where: { id },
+          select: {
+            id: true,
+            name: true,
+            username: true,
+            emailHost: true,
+            createdAt: true,
+          },
+        })
+      : await this.prisma.account.findMany({
+          select: {
+            id: true,
+            name: true,
+            username: true,
+          },
+        });
   }
 
   // Buckets
-  public async createBucket(data: BucketValidator): Promise<{success: boolean, message: string}> {
+  public async createBucket(
+    data: BucketValidator,
+  ): Promise<{ success: boolean; message: string }> {
     try {
       const result = await this.prisma.bucket.create({
         data,
@@ -107,24 +122,28 @@ export class ApiService {
   }
 
   public async getBucket(): Promise<Partial<Bucket>[]> {
-    return await this.prisma.bucket.findMany({select: {
-      id: true,
-      name: true,
-      path: true,
-      region: true,
-    }});
+    return await this.prisma.bucket.findMany({
+      select: {
+        id: true,
+        name: true,
+        path: true,
+        region: true,
+      },
+    });
   }
 
   // Templates
   public async getTemplates(): Promise<Partial<Template>[]> {
-    return await this.prisma.template.findMany({select: {
-      id: true,
-      name: true,
-    }});
+    return await this.prisma.template.findMany({
+      select: {
+        id: true,
+        name: true,
+      },
+    });
   }
 
- public async getTemplate(id: string): Promise<string> {
-    const template = await this.prisma.template.findUnique({where: {id}});
+  public async getTemplate(id: string): Promise<string> {
+    const template = await this.prisma.template.findUnique({ where: { id } });
     if (!template) {
       throw new ValueError('Template not found');
     }

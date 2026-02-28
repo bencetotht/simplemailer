@@ -141,3 +141,5 @@ vite.config.ts.timestamp-*
 
 migrations/
 generated/
+
+cache/

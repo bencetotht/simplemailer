@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { readFile } from 'fs/promises';
 const mjml = require('mjml').default || require('mjml');
 import Handlebars from 'handlebars';
-import { Template } from '@prisma/client';
+import { Template } from 'database';
 import { DbService } from 'src/db.service';
 import * as fs from 'fs';
 import { ValueError } from 'src/value.error';
@@ -11,7 +11,10 @@ import { ValueError } from 'src/value.error';
 export class TemplateService {
   constructor(private readonly dbService: DbService) {}
 
-  createMail = async (templateId: string, values: Record<string, any>): Promise<{ html: string; json: any; errors: any[] }> => {
+  createMail = async (
+    templateId: string,
+    values: Record<string, any>,
+  ): Promise<{ html: string; json: any; errors: any[] }> => {
     const template: string = await this.getTemplate(templateId);
     const compiled = mjml(template, {
       preprocessors: [
@@ -35,5 +38,5 @@ export class TemplateService {
     } else {
       throw new ValueError('Invalid template storage type');
     }
-  }
+  };
 }

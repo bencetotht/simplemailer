@@ -23,7 +23,7 @@ export class WebsocketGateway
   server: Server;
 
   private readonly logger = new Logger(WebsocketGateway.name);
-  
+
   private static instance: WebsocketGateway;
 
   afterInit(server: Server) {
@@ -33,12 +33,12 @@ export class WebsocketGateway
 
   handleConnection(client: Socket, ...args: any[]) {
     this.logger.log(`Client connected: ${client.id}`);
-    
+
     // Send initial connection message
-    client.emit('connected', { 
-      message: 'Connected to Mailer Worker', 
+    client.emit('connected', {
+      message: 'Connected to Mailer Worker',
       clientId: client.id,
-      timestamp: new Date().toISOString()
+      timestamp: new Date().toISOString(),
     });
   }
 
@@ -49,10 +49,10 @@ export class WebsocketGateway
   @SubscribeMessage('ping')
   handlePing(client: Socket, payload: any) {
     this.logger.log(`Ping received from ${client.id}`);
-    client.emit('pong', { 
-      message: 'Pong!', 
+    client.emit('pong', {
+      message: 'Pong!',
       timestamp: new Date().toISOString(),
-      payload 
+      payload,
     });
   }
 
@@ -60,9 +60,9 @@ export class WebsocketGateway
   handleSubscribeLogs(client: Socket, payload: any) {
     this.logger.log(`Client ${client.id} subscribed to logs`);
     client.join('logs');
-    client.emit('subscribed', { 
-      channel: 'logs', 
-      message: 'Successfully subscribed to logs' 
+    client.emit('subscribed', {
+      channel: 'logs',
+      message: 'Successfully subscribed to logs',
     });
   }
 
@@ -70,9 +70,9 @@ export class WebsocketGateway
   handleUnsubscribeLogs(client: Socket, payload: any[]) {
     this.logger.log(`Client ${client.id} unsubscribed from logs`);
     client.leave('logs');
-    client.emit('unsubscribed', { 
-      channel: 'logs', 
-      message: 'Successfully unsubscribed from logs' 
+    client.emit('unsubscribed', {
+      channel: 'logs',
+      message: 'Successfully unsubscribed from logs',
     });
   }
 
@@ -84,13 +84,17 @@ export class WebsocketGateway
         level,
         message,
         timestamp: new Date().toISOString(),
-        ...optionalParams
+        ...optionalParams,
       });
     }
   }
 
   // Static method to broadcast logs from anywhere
-  static broadcastLog(level: string, message: string, ...optionalParams: any[]) {
+  static broadcastLog(
+    level: string,
+    message: string,
+    ...optionalParams: any[]
+  ) {
     if (WebsocketGateway.instance) {
       WebsocketGateway.instance.broadcastLog(level, message, ...optionalParams);
     }

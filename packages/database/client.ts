@@ -1,8 +1,14 @@
 import { PrismaClient } from "./generated/client";
 import { withAccelerate } from "@prisma/extension-accelerate";
 
-// Instantiate the extended Prisma client to infer its type
-const extendedPrisma = new PrismaClient().$extends(withAccelerate());
+const hasAccelerateUrl =
+  process.env.DATABASE_URL?.startsWith("prisma://") ||
+  process.env.DATABASE_URL?.startsWith("prisma+postgres://");
+
+const basePrisma = new PrismaClient();
+const extendedPrisma = hasAccelerateUrl
+  ? basePrisma.$extends(withAccelerate())
+  : basePrisma;
 type ExtendedPrismaClient = typeof extendedPrisma;
 
 // Use globalThis for broader environment compatibility

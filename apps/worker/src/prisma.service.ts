@@ -4,7 +4,7 @@ import {
   OnModuleInit,
   OnModuleDestroy,
 } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient } from 'database';
 
 @Injectable()
 export class PrismaService
@@ -12,12 +12,31 @@ export class PrismaService
   implements OnModuleInit, OnModuleDestroy
 {
   private readonly logger = new Logger(PrismaService.name);
+  private static readonly DEV_DATABASE_URL =
+    'postgresql://postgres:postgres@localhost:5432/mailer';
 
   constructor() {
+    const databaseUrl =
+      process.env.DATABASE_URL ?? PrismaService.DEV_DATABASE_URL;
+
+    if (!process.env.DATABASE_URL && process.env.NODE_ENV === 'production') {
+      throw new Error(
+        'DATABASE_URL is required in production environment for Prisma',
+      );
+    }
+
+    if (!process.env.DATABASE_URL) {
+      // Explicitly log fallback usage so local startup behavior is predictable.
+      Logger.warn(
+        `DATABASE_URL not set, using development fallback: ${PrismaService.DEV_DATABASE_URL}`,
+        PrismaService.name,
+      );
+    }
+
     super({
       datasources: {
         db: {
-          url: process.env.DATABASE_URL,
+          url: databaseUrl,
         },
       },
     });

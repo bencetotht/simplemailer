@@ -8,7 +8,7 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule, {
     logger: new CustomLogger(),
   });
-  
+
   const microservice = app.connectMicroservice<MicroserviceOptions>({
     transport: Transport.RMQ,
     options: {
@@ -28,9 +28,11 @@ async function bootstrap() {
   const port = process.env.PORT || 3000;
   app.useGlobalPipes(new ValidationPipe());
   await app.listen(port);
-  
+
   const logger = app.get(CustomLogger);
-  logger.log(`Mailer worker is running in hybrid mode - HTTP on port ${port} and microservice listening to RabbitMQ`);
+  logger.log(
+    `Mailer worker is running in hybrid mode - HTTP on port ${port} and microservice listening to RabbitMQ`,
+  );
   logger.log(`WebSocket server is available through the NestJS gateway`);
 }
 

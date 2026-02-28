@@ -8,10 +8,13 @@ import { TemplateService } from './mailer/template.service';
 
 @Injectable()
 export class AppService {
-  constructor(private readonly dbService: DbService, private readonly s3Service: S3Service) {}
+  constructor(
+    private readonly dbService: DbService,
+    private readonly s3Service: S3Service,
+  ) {}
 
   async sendMail(id: string, data: MailJob): Promise<void> {
-    try { 
+    try {
       const credentials = await this.dbService.getCredentials(data.accountId);
     } catch (error) {
       throw error;

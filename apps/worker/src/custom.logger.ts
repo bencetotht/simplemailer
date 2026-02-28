@@ -30,12 +30,11 @@ class WSLogger {
 
 @Injectable()
 export class CustomLogger implements LoggerService {
-  
   private nestLogger = new ConsoleLogger();
   private wsLogger = new WSLogger();
-  
+
   constructor() {}
-  
+
   log(message: any, ...optionalParams: any[]) {
     this.nestLogger.log(message, ...optionalParams);
     this.wsLogger.info(`[${optionalParams[0]}] ${message}`);

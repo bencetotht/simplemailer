@@ -1,16 +1,19 @@
-import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
-import { PrismaService } from "./prisma.service";
+import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import { PrismaService } from './prisma.service';
 import * as yaml from 'yaml';
 import * as fs from 'fs';
-import { Account, Bucket, Template } from "@prisma/client";
-import { ConfigError } from "./config.error";
-import { S3Service } from "./s3.service";
+import { Account, Bucket, Template } from 'database';
+import { ConfigError } from './config.error';
+import { S3Service } from './s3.service';
 
 @Injectable()
 export class ConfigParser implements OnModuleInit {
   private logger = new Logger(ConfigParser.name);
 
-  constructor(private readonly prisma: PrismaService, private readonly s3Service: S3Service) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly s3Service: S3Service,
+  ) {}
 
   async onModuleInit() {
     try {
@@ -30,9 +33,9 @@ export class ConfigParser implements OnModuleInit {
 
   // Parse config.yaml
   public async parseConfig(path: string): Promise<void> {
-    try{
+    try {
       const config = yaml.parse(fs.readFileSync(path, 'utf8'));
-      
+
       // Add accounts to the database
       try {
         for (const account of config.accounts) {
@@ -41,7 +44,7 @@ export class ConfigParser implements OnModuleInit {
       } catch (error) {
         this.logger.error('Error adding accounts to the database:', error);
       }
-      
+
       // Add buckets to the database
       try {
         for (const bucket of config.buckets) {
@@ -50,7 +53,7 @@ export class ConfigParser implements OnModuleInit {
       } catch (error) {
         this.logger.error('Error adding buckets to the database:', error);
       }
-      
+
       // Add templates to the database
       try {
         for (const template of config.templates) {
@@ -60,7 +63,9 @@ export class ConfigParser implements OnModuleInit {
         this.logger.error('Error adding templates to the database:', error);
       }
 
-      this.logger.log(`Config loaded successfully, with ${config.accounts.length} accounts, ${config.buckets.length} buckets, and ${config.templates.length} templates`);
+      this.logger.log(
+        `Config loaded successfully, with ${config.accounts.length} accounts, ${config.buckets.length} buckets, and ${config.templates.length} templates`,
+      );
 
       try {
         await this.validateTemplates();
@@ -76,12 +81,21 @@ export class ConfigParser implements OnModuleInit {
   // Add account to the database
   private async addAccount(account: Account): Promise<void> {
     try {
-    const result = await this.prisma.account.findUnique({where: {username: account.username}});
+      const result = await this.prisma.account.findUnique({
+        where: { username: account.username },
+      });
       if (!result) {
-        if (!account.username || !account.emailHost || !account.emailPort || !account.password) {
-          throw new ConfigError('Invalid account data: missing required fields');
+        if (
+          !account.username ||
+          !account.emailHost ||
+          !account.emailPort ||
+          !account.password
+        ) {
+          throw new ConfigError(
+            'Invalid account data: missing required fields',
+          );
         }
-          if (account.password.startsWith('env:')) {
+        if (account.password.startsWith('env:')) {
           const envVar = account.password.slice(4);
           const password = process.env[envVar];
           if (!password) {
@@ -101,9 +115,17 @@ export class ConfigParser implements OnModuleInit {
   // Add bucket to the database
   private async addBucket(bucket: Bucket): Promise<void> {
     try {
-      const result = await this.prisma.bucket.findUnique({where: {name: bucket.name}});
+      const result = await this.prisma.bucket.findUnique({
+        where: { name: bucket.name },
+      });
       if (!result) {
-        if (!bucket.name || !bucket.path || !bucket.accessKeyId || !bucket.secretAccessKey || !bucket.region) {
+        if (
+          !bucket.name ||
+          !bucket.path ||
+          !bucket.accessKeyId ||
+          !bucket.secretAccessKey ||
+          !bucket.region
+        ) {
           throw new ConfigError('Invalid bucket data: missing required fields');
         }
         if (bucket.accessKeyId.startsWith('env:')) {
@@ -134,17 +156,30 @@ export class ConfigParser implements OnModuleInit {
   // Add template to the database
   private async addTemplate(template: Template): Promise<void> {
     if (!template.storageType) {
-      this.logger.warn(`No storage type found for template ${template.name}, defaulting to LOCAL`);
-      template.storageType = "LOCAL";
+      this.logger.warn(
+        `No storage type found for template ${template.name}, defaulting to LOCAL`,
+      );
+      template.storageType = 'LOCAL';
     }
     try {
-      const result = await this.prisma.template.findUnique({where: {name: template.name}});
+      const result = await this.prisma.template.findUnique({
+        where: { name: template.name },
+      });
       if (!result) {
-        if (template.storageType == "S3") {
-          if (!template.name || !template.subject || !template.filename || !template.bucketId) {
-            throw new ConfigError('Invalid template data: missing required fields');
+        if (template.storageType == 'S3') {
+          if (
+            !template.name ||
+            !template.subject ||
+            !template.filename ||
+            !template.bucketId
+          ) {
+            throw new ConfigError(
+              'Invalid template data: missing required fields',
+            );
           }
-          const bucket = await this.prisma.bucket.findUnique({where: {name: template.bucketId}});
+          const bucket = await this.prisma.bucket.findUnique({
+            where: { name: template.bucketId },
+          });
           if (!bucket) {
             throw new ConfigError('Invalid template data: bucket not found');
           }
@@ -154,18 +189,22 @@ export class ConfigParser implements OnModuleInit {
           await this.prisma.template.create({
             data: {
               ...template,
-              bucketId: bucket.id
+              bucketId: bucket.id,
             },
           });
-        } else if (template.storageType == "LOCAL") {
+        } else if (template.storageType == 'LOCAL') {
           if (!template.name || !template.subject || !template.filename) {
-            throw new ConfigError('Invalid template data: missing required fields');
+            throw new ConfigError(
+              'Invalid template data: missing required fields',
+            );
           }
           await this.prisma.template.create({
             data: template,
           });
         } else {
-          throw new ConfigError('Invalid template data: storage type not found');
+          throw new ConfigError(
+            'Invalid template data: storage type not found',
+          );
         }
       }
     } catch (error) {
@@ -178,10 +217,10 @@ export class ConfigParser implements OnModuleInit {
     const tempCount = {
       local: 0,
       s3: 0,
-    }
+    };
     const templates = await this.prisma.template.findMany();
     for (const template of templates) {
-      if (template.storageType == "LOCAL") {
+      if (template.storageType == 'LOCAL') {
         // const file = fs.readFileSync(`${process.env.TEMPLATE_PATH}/${template.filename}`, 'utf8');
         try {
           fs.readFileSync(`../../templates/${template.filename}`, 'utf8');
@@ -189,11 +228,12 @@ export class ConfigParser implements OnModuleInit {
           throw new ConfigError(`Template ${template.filename} not found`);
         }
         tempCount.local++;
-      }
-      else if (template.storageType == "S3") {
+      } else if (template.storageType == 'S3') {
         tempCount.s3++;
       }
     }
-    this.logger.log(`Templates validated successfully with ${tempCount.local} local templates and ${tempCount.s3} S3 templates`);
+    this.logger.log(
+      `Templates validated successfully with ${tempCount.local} local templates and ${tempCount.s3} S3 templates`,
+    );
   }
 }
