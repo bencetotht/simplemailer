@@ -15,19 +15,18 @@
     }
   },
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
     "db:generate": "prisma generate --no-engine",
     "db:migrate": "prisma migrate dev",
     "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "clean": "rm -rf generated"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
-  "packageManager": "pnpm@10.12.4",
   "devDependencies": {
     "@types/node": "^24.2.0",
-    "prisma": "catalog:prisma",
+    "prisma": "^6.13.0",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2"
   },
