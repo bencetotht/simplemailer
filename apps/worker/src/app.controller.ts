@@ -5,20 +5,23 @@ import { Ctx } from '@nestjs/microservices';
 import { MailJob } from './interfaces/mail';
 import { PrismaService } from './prisma.service';
 import { DbService } from './db.service';
-import { Status } from 'database';
+import { Status } from '@prisma/client';
 import { ValueError } from './value.error';
 import { MailService } from './mailer/mail.service';
 import { TemplateService } from './mailer/template.service';
 import { MailerError, MailerMaxRetriesError } from './mailer/mailer.error';
 import { QueueService } from './queue.service';
+import { PrometheusService } from './prometheus.service';
 
 @Controller()
 export class QueueController {
   private readonly logger = new Logger(QueueController.name);
-  constructor(private readonly appService: AppService, private readonly dbService: DbService, private readonly mailService: MailService, private readonly queueService: QueueService) {}
+  constructor(private readonly appService: AppService, private readonly dbService: DbService, private readonly mailService: MailService, private readonly queueService: QueueService, private readonly prometheusService: PrometheusService) {}
 
   @MessagePattern('mail.send')
   public async execute(@Payload() data: MailJob, @Ctx() context: RmqContext) {
+      this.prometheusService.logProcessedMail();
+
       const channel = context.getChannelRef();
       const orginalMessage = context.getMessage();
 

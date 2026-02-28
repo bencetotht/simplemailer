@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from '@nestjs/common';
 import { readFile } from 'fs/promises';
 const mjml = require('mjml').default || require('mjml');
 import Handlebars from 'handlebars';
-import { Template } from 'database';
+import { Template } from '@prisma/client';
 import { DbService } from 'src/db.service';
 import * as fs from 'fs';
 import { ValueError } from 'src/value.error';

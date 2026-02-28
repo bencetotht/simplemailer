@@ -1,0 +1,46 @@
+<mjml>
+  <mj-head>
+    <mj-title>Welcome Email</mj-title>
+    <mj-font name="Roboto" href="https://fonts.googleapis.com/css?family=Roboto" />
+    <mj-attributes>
+      <mj-all font-family="Roboto, Helvetica, sans-serif" />
+    </mj-attributes>
+  </mj-head>
+  <mj-body background-color="#f4f4f4">
+    <mj-section background-color="#ffffff" padding="20px 0">
+      <mj-column>
+        <mj-image width="200px" src="https://via.placeholder.com/200x50" alt="Logo" />
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="0 20px">
+      <mj-column>
+        <mj-text font-size="20px" color="#333333" font-weight="bold">
+          Welcome {{name}}!
+        </mj-text>
+        <mj-text font-size="16px" color="#555555" line-height="24px">
+          Thank you for joining us. We're excited to have you on board!
+        </mj-text>
+        <mj-button background-color="#2e58ff" color="white" href="{{loginUrl}}">
+          Get Started
+        </mj-button>
+      </mj-column>
+    </mj-section>
+
+    <mj-section background-color="#ffffff" padding="20px">
+      <mj-column>
+        <mj-text font-size="14px" color="#888888" align="center">
+          If you have any questions, feel free to contact our support team.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+
+    <mj-section padding="20px 0">
+      <mj-column>
+        <mj-text font-size="12px" color="#888888" align="center">
+          © 2024 Your Company. All rights reserved.
+        </mj-text>
+      </mj-column>
+    </mj-section>
+  </mj-body>
+</mjml>

@@ -1,7 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
 import { MailJob } from "./interfaces/mail";
-import { Account, Log, Status, Template } from "database";
+import { Account, Log, Status, Template } from "@prisma/client";
 import { ValueError } from "./value.error";
 
 @Injectable()
@@ -79,5 +79,28 @@ export class DbService {
 
         if (!account) throw new ValueError(`Account with id ${accountId} not found`);
         return;
+    }
+
+    async getMetrics(): Promise<{ accounts: number, templates: number, sentMails: number, failedMails: number, pendingMails: number }> {
+        const accounts = await this.prisma.account.count();
+        const templates = await this.prisma.template.count();
+        const sentMails = await this.prisma.log.count({
+            where: {
+                status: Status.SENT,
+            },
+        });
+        const failedMails = await this.prisma.log.count({
+            where: {
+                status: Status.FAILED,
+            },
+        });
+        const pendingMails = await this.prisma.log.count({
+            where: {
+                status: {
+                    in: [Status.PENDING, Status.RETRYING],
+                },
+            },
+        });
+        return { accounts, templates, sentMails, failedMails, pendingMails };
     }
 }

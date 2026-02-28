@@ -2,7 +2,7 @@ import { Injectable, OnModuleInit, Logger } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
 import * as yaml from 'yaml';
 import * as fs from 'fs';
-import { Account, Bucket, Template } from "database";
+import { Account, Bucket, Template } from "@prisma/client";
 import { ConfigError } from "./config.error";
 import { S3Service } from "./s3.service";
 

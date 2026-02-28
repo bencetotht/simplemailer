@@ -133,5 +133,11 @@ export class QueueService implements OnModuleInit {
     }
     
   }
+
+  public async getQueueSize() {
+    const channel = await this.getChannel();
+    const queue = await channel.assertQueue('mailer', { durable: true });
+    return queue.messageCount;
+  }
 }
 

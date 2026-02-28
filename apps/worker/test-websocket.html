@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket Test</title>
+    <script src="https://cdn.socket.io/4.8.1/socket.io.min.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .status { padding: 10px; margin: 10px 0; border-radius: 5px; }
+        .connected { background-color: #d4edda; color: #155724; }
+        .disconnected { background-color: #f8d7da; color: #721c24; }
+        .log { background-color: #f8f9fa; border: 1px solid #dee2e6; padding: 10px; margin: 5px 0; font-family: monospace; }
+        button { padding: 10px 20px; margin: 5px; border: none; border-radius: 5px; cursor: pointer; background-color: #007bff; color: white; }
+    </style>
+</head>
+<body>
+    <h1>WebSocket Test Client</h1>
+    <p><strong>IMPORTANT:</strong> This connects to port 3000 (where your worker runs)</p>
+    <p>Your dashboard can run on port 3002 (CORS allows it)</p>
+    
+    <div id="status" class="status disconnected">Disconnected</div>
+    
+    <div>
+        <button onclick="ping()">Send Ping</button>
+        <button onclick="subscribeLogs()">Subscribe to Logs</button>
+        <button onclick="unsubscribeLogs()">Unsubscribe from Logs</button>
+    </div>
+    
+    <h3>Connection Logs:</h3>
+    <div id="logs"></div>
+
+    <script>
+        const socket = io('http://localhost:3000', {
+            transports: ['websocket', 'polling']
+        });
+
+        function addLog(message) {
+            const logsDiv = document.getElementById('logs');
+            const logDiv = document.createElement('div');
+            logDiv.className = 'log';
+            logDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+            logsDiv.appendChild(logDiv);
+            logsDiv.scrollTop = logsDiv.scrollHeight;
+        }
+
+        function updateStatus(connected) {
+            const statusDiv = document.getElementById('status');
+            if (connected) {
+                statusDiv.textContent = 'Connected!';
+                statusDiv.className = 'status connected';
+            } else {
+                statusDiv.textContent = 'Disconnected';
+                statusDiv.className = 'status disconnected';
+            }
+        }
+
+        socket.on('connect', () => {
+            updateStatus(true);
+            addLog('Connected to WebSocket server on port 3000');
+        });
+
+        socket.on('disconnect', () => {
+            updateStatus(false);
+            addLog('Disconnected from server');
+        });
+
+        socket.on('connected', (data) => {
+            addLog(`Server welcome: ${data.message} (Client ID: ${data.clientId})`);
+        });
+
+        socket.on('pong', (data) => {
+            addLog(`Pong received: ${data.message}`);
+        });
+
+        socket.on('subscribed', (data) => {
+            addLog(`Subscribed to ${data.channel}: ${data.message}`);
+        });
+
+        socket.on('unsubscribed', (data) => {
+            addLog(`Unsubscribed from ${data.channel}: ${data.message}`);
+        });
+
+        socket.on('log', (data) => {
+            addLog(`[${data.level.toUpperCase()}] ${data.message}`);
+        });
+
+        socket.on('error', (error) => {
+            addLog(`Error: ${error}`);
+        });
+
+        function ping() {
+            socket.emit('ping', { message: 'Hello from browser!' });
+            addLog('Ping sent');
+        }
+
+        function subscribeLogs() {
+            socket.emit('subscribe_logs');
+        }
+
+        function unsubscribeLogs() {
+            socket.emit('unsubscribe_logs');
+        }
+    </script>
+</body>
+</html>

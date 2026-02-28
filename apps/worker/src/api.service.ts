@@ -1,6 +1,6 @@
 import {  Injectable } from "@nestjs/common";
 import { PrismaService } from "./prisma.service";
-import { Account, Bucket, Log, Template } from "database";
+import { Account, Bucket, Log, Template } from "@prisma/client";
 import { AccountValidator, BucketValidator, MailJobValidator } from "./interfaces/validator";
 import { MailJob } from "./interfaces/mail";
 import { QueueService } from "./queue.service";

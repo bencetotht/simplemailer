@@ -1,6 +1,6 @@
 import { Body, Controller, Get, Param, Post, Query } from "@nestjs/common";
 import { ApiService } from "./api.service";
-import { Account, Bucket, Log, Template } from "database";
+import { Account, Bucket, Log, Template } from "@prisma/client";
 import { AccountValidator, BucketValidator, MailJobValidator } from "./interfaces/validator";
 
 @Controller('api')

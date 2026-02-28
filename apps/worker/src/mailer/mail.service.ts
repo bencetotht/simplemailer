@@ -1,5 +1,5 @@
 import { Injectable, Logger } from "@nestjs/common";
-import { Account, Template } from "database";
+import { Account, Template } from "@prisma/client";
 import { MailJob } from "src/interfaces/mail";
 import { TemplateService } from "./template.service";
 import { Transporter } from "nodemailer";
