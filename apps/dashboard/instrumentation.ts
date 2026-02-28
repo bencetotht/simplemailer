@@ -1,9 +1,4 @@
-import type { NextConfig } from "next";
-
-// Work around broken Node localStorage globals (for example when started with an
-// invalid --localstorage-file flag). Some libraries gate on `typeof localStorage`
-// and then call `getItem`, which crashes if the global is malformed.
-{
+function installSafeLocalStorage() {
   const store = new Map<string, string>();
   const memoryStorage = {
     getItem(key: string) {
@@ -33,13 +28,10 @@ import type { NextConfig } from "next";
       value: memoryStorage,
     });
   } catch {
-    // Fallback for runtimes where `defineProperty` on the global is restricted.
     (globalThis as { localStorage?: unknown }).localStorage = memoryStorage;
   }
 }
 
-const nextConfig: NextConfig = {
-  serverExternalPackages: ["amqplib"],
-};
-
-export default nextConfig;
+export function register() {
+  installSafeLocalStorage();
+}

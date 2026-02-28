@@ -8,7 +8,8 @@
     "schema.prisma"
   ],
   "exports": {
-    ".": {
+    ".": "./index.ts",
+    "./generated/client": {
       "import": "./generated/client/index.js",
       "require": "./generated/client/index.js",
       "types": "./generated/client/index.d.ts"

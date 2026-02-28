@@ -13,12 +13,13 @@ type ExtendedPrismaClient = typeof extendedPrisma;
 
 // Use globalThis for broader environment compatibility
 const globalForPrisma = globalThis as typeof globalThis & {
-  prisma?: ExtendedPrismaClient;
+  prisma?: PrismaClient;
 };
 
 // Named export with global memoization
-export const prisma: ExtendedPrismaClient =
-  globalForPrisma.prisma ?? extendedPrisma;
+// Cast to PrismaClient to avoid union type issues from the conditional Accelerate extension
+export const prisma: PrismaClient =
+  (globalForPrisma.prisma ?? extendedPrisma) as PrismaClient;
 
 if (process.env.NODE_ENV !== "production") {
   globalForPrisma.prisma = prisma;
