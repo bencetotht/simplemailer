@@ -16,8 +16,21 @@ export async function createLog(data: MailJob): Promise<Log> {
   });
 }
 
-export async function updateLogStatus(id: string, status: Status): Promise<Log> {
-  return prisma.log.update({ where: { id }, data: { status } });
+export async function updateLogStatus(
+  id: string,
+  status: Status,
+  opts?: { retryCount?: number; lastError?: string },
+): Promise<Log> {
+  const isTerminal = status === Status.SENT || status === Status.FAILED;
+  return prisma.log.update({
+    where: { id },
+    data: {
+      status,
+      ...(opts?.retryCount !== undefined && { retryCount: opts.retryCount }),
+      ...(opts?.lastError !== undefined && { lastError: opts.lastError }),
+      ...(isTerminal && { completedAt: new Date() }),
+    },
+  });
 }
 
 export async function getCredentials(

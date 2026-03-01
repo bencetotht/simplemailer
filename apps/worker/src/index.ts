@@ -13,7 +13,7 @@ async function main() {
   console.log(`[worker] Starting worker ${config.workerId} v${config.workerVersion}`);
 
   // Seed from config.yaml if it exists
-  const configPath = path.resolve('../../config.yaml');
+  const configPath = process.env.CONFIG_PATH || path.resolve('../../config.yaml');
   if (fs.existsSync(configPath)) {
     console.log('[worker] Seeding from config.yaml...');
     await seedFromConfigYaml(configPath);

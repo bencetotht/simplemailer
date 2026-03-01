@@ -17,6 +17,7 @@ export function resolveConfig(): WorkerConfig {
     maxRetries: parseInt(process.env.MAX_RETRIES || '5', 10),
     templatePath: process.env.TEMPLATE_PATH || '../../templates',
     s3Endpoint: process.env.S3_ENDPOINT,
+    s3Port: process.env.S3_PORT ? parseInt(process.env.S3_PORT, 10) : undefined,
     s3AccessKey: process.env.S3_ACCESS_KEY,
     s3SecretKey: process.env.S3_SECRET_KEY,
     s3Bucket: process.env.S3_BUCKET,

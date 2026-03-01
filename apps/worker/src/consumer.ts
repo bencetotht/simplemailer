@@ -108,7 +108,7 @@ async function handleMessage(
   // Create or update DB log entry
   const logEntry =
     isRetry && dbId
-      ? await updateLogStatus(dbId, Status.RETRYING)
+      ? await updateLogStatus(dbId, Status.RETRYING, { retryCount, lastError: headers.failureReason as string | undefined })
       : await createLog(data);
 
   if (!isRetry) {
@@ -147,7 +147,7 @@ async function handleMessage(
           dbId: logEntry.id,
         };
         publishRetry(channel, data, retryHeaders, delayMs);
-        await updateLogStatus(logEntry.id, Status.RETRYING);
+        await updateLogStatus(logEntry.id, Status.RETRYING, { retryCount: newRetryCount, lastError: err.message });
         console.warn(
           `[consumer] Retry ${newRetryCount}/${config.maxRetries} for ${data.recipient} ` +
           `(job ${logEntry.id}) in ${delayMs}ms: ${err.message}`,
@@ -160,7 +160,7 @@ async function handleMessage(
           dbId: logEntry.id,
         };
         publishDeadLetter(channel, data, dlxHeaders);
-        await updateLogStatus(logEntry.id, Status.FAILED);
+        await updateLogStatus(logEntry.id, Status.FAILED, { retryCount: newRetryCount, lastError: err.message });
         console.error(
           `[consumer] Max retries exhausted for ${data.recipient} (job ${logEntry.id}) — moved to dead letter queue`,
         );
@@ -168,14 +168,14 @@ async function handleMessage(
     } else if (err instanceof ValueError) {
       // Permanent failure — do not retry
       channel.nack(msg, false, false);
-      await updateLogStatus(logEntry.id, Status.FAILED);
+      await updateLogStatus(logEntry.id, Status.FAILED, { lastError: err.message });
       console.error(
         `[consumer] Permanent failure for ${data.recipient} (job ${logEntry.id}): ${err.message}`,
       );
     } else {
       // Unexpected error
       channel.nack(msg, false, false);
-      await updateLogStatus(logEntry.id, Status.FAILED);
+      await updateLogStatus(logEntry.id, Status.FAILED, { lastError: err instanceof Error ? err.message : String(err) });
       console.error(
         `[consumer] Unexpected error for ${data.recipient} (job ${logEntry.id}):`,
         err,

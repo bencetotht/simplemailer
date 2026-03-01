@@ -1,0 +1,11 @@
+**/node_modules
+**/.next
+**/dist
+**/.turbo
+**/tsconfig.tsbuildinfo
+.git
+.claude
+.env
+.env.*
+*.log
+packages/database/generated

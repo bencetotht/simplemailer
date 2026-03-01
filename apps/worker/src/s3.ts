@@ -2,13 +2,14 @@ import * as Minio from 'minio';
 import type { WorkerConfig } from './types';
 
 export function createS3Client(config: WorkerConfig): Minio.Client | null {
-  const { s3Endpoint, s3AccessKey, s3SecretKey } = config;
+  const { s3Endpoint, s3Port, s3AccessKey, s3SecretKey } = config;
   if (!s3Endpoint || !s3AccessKey || !s3SecretKey) {
     console.warn('[s3] S3 config missing — S3-backed templates will be unavailable');
     return null;
   }
   return new Minio.Client({
     endPoint: s3Endpoint,
+    port: s3Port || undefined,
     useSSL: false,
     accessKey: s3AccessKey,
     secretKey: s3SecretKey,

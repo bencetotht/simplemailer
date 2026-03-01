@@ -17,6 +17,7 @@ export interface WorkerConfig {
   maxRetries: number;
   templatePath: string;
   s3Endpoint?: string;
+  s3Port?: number;
   s3AccessKey?: string;
   s3SecretKey?: string;
   s3Bucket?: string;

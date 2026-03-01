@@ -1,0 +1,677 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "SimpleMailer API",
+    "version": "2.0.0",
+    "description": "REST API for the SimpleMailer dashboard. Exposes SMTP account management, template management, S3 bucket configuration, job queue inspection, and mail dispatch."
+  },
+  "tags": [
+    {
+      "name": "System",
+      "description": "Health and status endpoints"
+    },
+    {
+      "name": "Mail",
+      "description": "Queue mail jobs"
+    },
+    {
+      "name": "Jobs",
+      "description": "Inspect the RabbitMQ mailer queue"
+    },
+    {
+      "name": "Logs",
+      "description": "Delivery log records"
+    },
+    {
+      "name": "Accounts",
+      "description": "SMTP account management"
+    },
+    {
+      "name": "Buckets",
+      "description": "S3 bucket configuration"
+    },
+    {
+      "name": "Templates",
+      "description": "Email template management"
+    }
+  ],
+  "components": {
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string",
+            "example": "ok"
+          },
+          "message": {
+            "type": "string",
+            "example": "SimpleMailer dashboard API is running"
+          },
+          "version": {
+            "type": "string",
+            "example": "2.0.0"
+          }
+        }
+      },
+      "MailJobRequest": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "templateId",
+          "recipient",
+          "values"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "ID of the SMTP account to send from"
+          },
+          "templateId": {
+            "type": "string",
+            "description": "ID of the template to render"
+          },
+          "recipient": {
+            "type": "string",
+            "description": "Recipient email address",
+            "example": "user@example.com"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Template variable substitutions",
+            "example": {
+              "name": "Alice",
+              "confirmUrl": "https://example.com/confirm"
+            }
+          }
+        }
+      },
+      "AccountRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "username",
+          "password",
+          "emailHost",
+          "emailPort"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "Primary SMTP"
+          },
+          "username": {
+            "type": "string",
+            "example": "noreply@example.com"
+          },
+          "password": {
+            "type": "string",
+            "example": "app-password-here"
+          },
+          "emailHost": {
+            "type": "string",
+            "example": "smtp.example.com"
+          },
+          "emailPort": {
+            "type": "integer",
+            "example": 587
+          }
+        }
+      },
+      "AccountSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          }
+        }
+      },
+      "AccountDetail": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "emailHost": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BucketRequest": {
+        "type": "object",
+        "required": [
+          "name",
+          "path",
+          "accessKeyId",
+          "secretAccessKey",
+          "region"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "example": "my-templates-bucket"
+          },
+          "path": {
+            "type": "string",
+            "example": "templates/"
+          },
+          "accessKeyId": {
+            "type": "string",
+            "example": "AKIAIOSFODNN7EXAMPLE"
+          },
+          "secretAccessKey": {
+            "type": "string",
+            "example": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+          },
+          "region": {
+            "type": "string",
+            "example": "us-east-1"
+          }
+        }
+      },
+      "BucketSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "region": {
+            "type": "string"
+          }
+        }
+      },
+      "TemplateSummary": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "LogEntry": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "account": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "template": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": "string",
+            "description": "ID of the created resource on success, error detail on failure"
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string",
+            "example": "Validation failed"
+          },
+          "fields": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "paths": {
+    "/api/account": {
+      "get": {
+        "summary": "List SMTP accounts",
+        "description": "Returns all accounts. When an `id` query parameter is provided, returns the full detail (including `emailHost` and `createdAt`) for that single account. Without `id`, returns a lighter summary list.\n",
+        "tags": [
+          "Accounts"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Filter by account ID — returns full detail for that account"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of accounts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "oneOf": [
+                      {
+                        "$ref": "#/components/schemas/AccountSummary"
+                      },
+                      {
+                        "$ref": "#/components/schemas/AccountDetail"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an SMTP account",
+        "description": "Creates a new SMTP account. Passwords are stored as-is (app passwords).",
+        "tags": [
+          "Accounts"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account created — `message` contains the new account ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database error (e.g. duplicate username)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket": {
+      "get": {
+        "summary": "List S3 buckets",
+        "description": "Returns all configured S3 buckets (id, name, path, region). Credentials are never returned.",
+        "tags": [
+          "Buckets"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of bucket summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BucketSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "Create an S3 bucket configuration",
+        "description": "Stores a new S3 bucket configuration including credentials.",
+        "tags": [
+          "Buckets"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bucket created — `message` contains the new bucket ID",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Database error (e.g. duplicate name)",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns the current status, a human-readable message, and the API version.",
+        "tags": [
+          "System"
+        ],
+        "responses": {
+          "200": {
+            "description": "API is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "summary": "List queued mail jobs",
+        "description": "Returns up to 10 messages currently sitting in the RabbitMQ `mailer` queue (non-destructive peek via management API).",
+        "tags": [
+          "Jobs"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of raw queue message objects",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "summary": "List delivery logs",
+        "description": "Returns the most recent mail delivery log records ordered by creation date descending, with nested account and template info.",
+        "tags": [
+          "Logs"
+        ],
+        "parameters": [
+          {
+            "in": "query",
+            "name": "limit",
+            "schema": {
+              "type": "integer",
+              "default": 10
+            },
+            "description": "Maximum number of log entries to return"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of log entries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LogEntry"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send": {
+      "post": {
+        "summary": "Queue a mail job",
+        "description": "Validates the payload and publishes a `mail.send` message to the durable RabbitMQ `mailer` queue.",
+        "tags": [
+          "Mail"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Message successfully queued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Failed to publish to queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/template/{id}": {
+      "get": {
+        "summary": "Get template content",
+        "description": "Returns the raw template file content as plain text. For `LOCAL` storage type, the file is read from the `../../templates/` directory. For `S3` storage type, an empty string is returned (S3 fetching not yet implemented).\n",
+        "tags": [
+          "Templates"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Template ID"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template file contents",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found in database or file not found on disk",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/template": {
+      "get": {
+        "summary": "List email templates",
+        "description": "Returns all templates as lightweight summaries (id + name). Use `GET /api/template/{id}` to fetch the rendered content.",
+        "tags": [
+          "Templates"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of template summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateSummary"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workers": {
+      "get": {
+        "summary": "List active workers",
+        "description": "Returns workers that sent a heartbeat within the last 30 seconds.",
+        "tags": [
+          "Workers"
+        ],
+        "responses": {
+          "200": {
+            "description": "Array of active worker heartbeat records"
+          }
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,17 @@
+**
+!package.json
+!bun.lock
+!apps
+!apps/worker
+!apps/worker/package.json
+!apps/dashboard
+!apps/dashboard/**
+!packages
+!packages/database
+!packages/database/**
+apps/dashboard/.next
+apps/dashboard/node_modules
+apps/dashboard/.turbo
+apps/dashboard/tsconfig.tsbuildinfo
+packages/database/generated
+packages/database/node_modules
