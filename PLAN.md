@@ -74,7 +74,31 @@ Note: keep current singular route names first for compatibility (`account`, `buc
 - Do not move long-running queue consumers to Next.js runtime.
 - Do not remove worker queue processing yet.
 
-## Phase B: Worker simplification (stateless execution service)
+## Phase B: Worker simplification (stateless execution service) ✅ COMPLETED
+
+### Implemented
+- Dropped NestJS entirely — plain Bun service with `amqplib` directly
+- Created new source files: `types.ts`, `errors.ts`, `config.ts`, `db.ts`, `s3.ts`, `template.ts`, `mail.ts`, `queue.ts`, `metrics.ts`, `health.ts`, `consumer.ts`, `index.ts`
+- Implemented proper RabbitMQ DLX topology:
+  - `mailer.exchange` (direct) → `mailer` queue (main)
+  - `mailer.retry` (direct) → `mailer.retry` queue (per-message TTL expires → dead-letters back to `mailer.exchange`)
+  - `mailer.dlx` (fanout) → `mailer.dead` queue (final resting place)
+- Worker heartbeat: `WorkerHeartbeat` Prisma model + `/api/workers` dashboard route
+- Fixed bugs from NestJS version:
+  - Uses `account.emailPort` from DB (not hardcoded 465)
+  - Real retry delays via RabbitMQ per-message `expiration` TTL
+  - Single persistent AMQP connection
+  - Fetches account and template in parallel (single round-trip)
+- Prometheus metrics via plain `prom-client` + `Bun.serve()` on `:9091`
+- Graceful shutdown: drain in-flight → deregister heartbeat → close AMQP → disconnect Prisma
+- Removed all NestJS files, `nest-cli.json`, per-worker `prisma/` directory
+
+### Exit criteria
+- `bun run type-check` passes. ✅
+- `bun run lint` passes (no errors). ✅
+- `bun run db:generate` and `db:migrate` applied WorkerHeartbeat. ✅
+
+## Phase B: Worker simplification (stateless execution service) — ORIGINAL NOTES
 
 ### Target responsibility of worker
 - Consume queue messages.

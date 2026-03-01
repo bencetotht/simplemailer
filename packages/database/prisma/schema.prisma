@@ -62,6 +62,16 @@ model Log {
   updatedAt  DateTime @updatedAt
 }
 
+model WorkerHeartbeat {
+  id            String   @id
+  startedAt     DateTime @default(now())
+  lastHeartbeat DateTime @default(now())
+  version       String   @default("2.0.0")
+  metadata      Json     @default("{}")
+
+  @@map("worker_heartbeats")
+}
+
 enum STORAGE_TYPE {
   S3
   LOCAL
