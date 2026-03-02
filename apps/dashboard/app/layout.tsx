@@ -5,7 +5,6 @@ import { PageSideBar } from "@/components/pageSideBar";
 import { SidebarTrigger, SidebarProvider } from "@/components/ui/sidebar";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ThemeToggle } from "@/components/theme-toggle";
-import { ConnectionStatus } from "@/components/connection-status";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -48,7 +47,6 @@ export default function RootLayout({
                     <h1 className="text-lg font-semibold">Simple Mailer Dashboard</h1>
                   </div>
                   <div className="flex items-center space-x-4">
-                    <ConnectionStatus />
                     <ThemeToggle />
                   </div>
                 </header>

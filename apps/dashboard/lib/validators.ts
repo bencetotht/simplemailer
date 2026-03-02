@@ -22,3 +22,16 @@ export const bucketSchema = z.object({
   secretAccessKey: z.string().min(1),
   region: z.string().min(1),
 });
+
+export const templateCreateSchema = z.object({
+  name: z.string().min(1),
+  subject: z.string().min(1),
+  content: z.string(),
+  storageType: z.enum(["LOCAL", "S3"]).default("LOCAL"),
+});
+
+export const templateUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  subject: z.string().min(1).optional(),
+  content: z.string().optional(),
+});

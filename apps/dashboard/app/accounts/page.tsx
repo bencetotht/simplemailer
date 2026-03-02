@@ -1,0 +1,184 @@
+'use client';
+
+import { useCallback, useEffect, useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
+} from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { getAccounts, createAccount, deleteAccount, type Account } from "@/lib/api";
+import { accountSchema } from "@/lib/validators";
+import { Plus, Trash2, RefreshCw } from "lucide-react";
+
+const tableHeadStyle = "font-medium text-muted-foreground text-xs uppercase tracking-wider pb-3";
+
+const defaultForm = { name: '', username: '', password: '', emailHost: '', emailPort: '587' };
+
+export default function AccountsPage() {
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [open, setOpen] = useState(false);
+  const [form, setForm] = useState(defaultForm);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState('');
+
+  const load = useCallback(async () => {
+    setIsLoading(true);
+    const data = await getAccounts().catch(() => []);
+    setAccounts(data);
+    setIsLoading(false);
+  }, []);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleSubmit = async () => {
+    const parsed = accountSchema.safeParse({
+      ...form,
+      emailPort: Number(form.emailPort),
+    });
+    if (!parsed.success) {
+      const fieldErrors: Record<string, string> = {};
+      for (const [k, v] of Object.entries(parsed.error.flatten().fieldErrors)) {
+        fieldErrors[k] = (v as string[])[0];
+      }
+      setErrors(fieldErrors);
+      return;
+    }
+    setSaving(true);
+    const res = await createAccount(parsed.data).catch(() => ({ success: false, message: 'Network error' }));
+    setSaving(false);
+    if (res.success) {
+      setOpen(false);
+      setForm(defaultForm);
+      setErrors({});
+      load();
+    } else {
+      setFeedback(res.message ?? 'Error creating account');
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Delete this account?')) return;
+    await deleteAccount(id).catch(() => null);
+    load();
+  };
+
+  const field = (key: keyof typeof form) => ({
+    value: form[key],
+    onChange: (e: React.ChangeEvent<HTMLInputElement>) => {
+      setForm((f) => ({ ...f, [key]: e.target.value }));
+      setErrors((e_) => ({ ...e_, [key]: '' }));
+    },
+  });
+
+  const skeletonRows = Array.from({ length: 3 }, (_, i) => (
+    <TableRow key={i}>
+      {Array.from({ length: 6 }, (_, j) => (
+        <TableCell key={j}><Skeleton className="h-4 w-20" /></TableCell>
+      ))}
+    </TableRow>
+  ));
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-3xl font-bold tracking-tight">Accounts</h2>
+          <p className="text-muted-foreground">Manage SMTP accounts</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Button onClick={load} disabled={isLoading} variant="outline" size="sm">
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? 'animate-spin' : ''}`} />
+            Refresh
+          </Button>
+          <Button onClick={() => { setOpen(true); setFeedback(''); setErrors({}); setForm(defaultForm); }} size="sm">
+            <Plus className="h-4 w-4 mr-2" />
+            Add Account
+          </Button>
+        </div>
+      </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>SMTP Accounts ({isLoading ? '…' : accounts.length})</CardTitle>
+        </CardHeader>
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-b border-border hover:bg-transparent">
+                <TableHead className={tableHeadStyle}>Name</TableHead>
+                <TableHead className={tableHeadStyle}>Username</TableHead>
+                <TableHead className={tableHeadStyle}>Host</TableHead>
+                <TableHead className={tableHeadStyle}>Port</TableHead>
+                <TableHead className={tableHeadStyle}>Created At</TableHead>
+                <TableHead className={tableHeadStyle}>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {isLoading ? skeletonRows : (
+                <>
+                  {accounts.map((a) => (
+                    <TableRow key={a.id} className="border-b border-border hover:bg-muted/50">
+                      <TableCell className="text-sm font-medium">{a.name}</TableCell>
+                      <TableCell className="text-sm">{a.username}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{a.emailHost}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{a.emailPort}</TableCell>
+                      <TableCell className="text-sm text-muted-foreground">{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell>
+                        <Button variant="ghost" size="sm" onClick={() => handleDelete(a.id)} className="text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950">
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                  {accounts.length === 0 && (
+                    <TableRow>
+                      <TableCell colSpan={6} className="text-center text-muted-foreground py-12 text-sm">
+                        No accounts found. Add one to get started.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </>
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Add SMTP Account</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-2">
+            {feedback && <p className="text-sm text-red-500">{feedback}</p>}
+            {([
+              { key: 'name', label: 'Name', type: 'text', placeholder: 'My Gmail' },
+              { key: 'username', label: 'Username / Email', type: 'email', placeholder: 'user@gmail.com' },
+              { key: 'password', label: 'Password', type: 'password', placeholder: 'App password' },
+              { key: 'emailHost', label: 'SMTP Host', type: 'text', placeholder: 'smtp.gmail.com' },
+              { key: 'emailPort', label: 'SMTP Port', type: 'number', placeholder: '587' },
+            ] as const).map(({ key, label, type, placeholder }) => (
+              <div key={key} className="grid gap-1.5">
+                <Label htmlFor={key}>{label}</Label>
+                <Input id={key} type={type} placeholder={placeholder} {...field(key)} />
+                {errors[key] && <p className="text-xs text-red-500">{errors[key]}</p>}
+              </div>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={handleSubmit} disabled={saving}>{saving ? 'Saving…' : 'Save'}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

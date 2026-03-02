@@ -75,7 +75,7 @@ export async function GET(request: NextRequest) {
         },
       })
     : await prisma.account.findMany({
-        select: { id: true, name: true, username: true },
+        select: { id: true, name: true, username: true, emailHost: true, emailPort: true, createdAt: true },
       });
 
   return NextResponse.json(accounts);

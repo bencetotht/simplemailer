@@ -6,45 +6,67 @@ import { prisma } from "@/lib/db";
  * /api/logs:
  *   get:
  *     summary: List delivery logs
- *     description: Returns the most recent mail delivery log records ordered by creation date descending, with nested account and template info.
+ *     description: Returns paginated mail delivery log records with optional filters.
  *     tags: [Logs]
  *     parameters:
  *       - in: query
- *         name: limit
+ *         name: skip
  *         schema:
  *           type: integer
- *           default: 10
- *         description: Maximum number of log entries to return
+ *           default: 0
+ *         description: Number of records to skip (pagination offset)
+ *       - in: query
+ *         name: take
+ *         schema:
+ *           type: integer
+ *           default: 20
+ *         description: Number of records to return
+ *       - in: query
+ *         name: status
+ *         schema:
+ *           type: string
+ *           enum: [PENDING, SENT, FAILED, RETRYING]
+ *         description: Filter by status
+ *       - in: query
+ *         name: recipient
+ *         schema:
+ *           type: string
+ *         description: Filter by recipient (partial match)
  *     responses:
  *       200:
- *         description: Array of log entries
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 $ref: '#/components/schemas/LogEntry'
+ *         description: Paginated log entries
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
-  const limit = parseInt(searchParams.get("limit") ?? "10", 10);
+  const skip = parseInt(searchParams.get("skip") ?? "0", 10);
+  const take = parseInt(searchParams.get("take") ?? "20", 10);
+  const status = searchParams.get("status") ?? undefined;
+  const recipient = searchParams.get("recipient") ?? undefined;
 
-  const logs = await prisma.log.findMany({
-    orderBy: { createdAt: "desc" },
-    take: limit,
-    select: {
-      id: true,
-      recipient: true,
-      status: true,
-      createdAt: true,
-      account: {
-        select: { id: true, name: true },
-      },
-      template: {
-        select: { id: true, name: true },
-      },
-    },
-  });
+  const where = {
+    ...(status ? { status: status as "PENDING" | "SENT" | "FAILED" | "RETRYING" } : {}),
+    ...(recipient ? { recipient: { contains: recipient, mode: "insensitive" as const } } : {}),
+  };
 
-  return NextResponse.json(logs);
+  const [data, total] = await Promise.all([
+    prisma.log.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip,
+      take,
+      select: {
+        id: true,
+        recipient: true,
+        status: true,
+        retryCount: true,
+        completedAt: true,
+        createdAt: true,
+        account: { select: { id: true, name: true } },
+        template: { select: { id: true, name: true } },
+      },
+    }),
+    prisma.log.count({ where }),
+  ]);
+
+  return NextResponse.json({ data, total });
 }
