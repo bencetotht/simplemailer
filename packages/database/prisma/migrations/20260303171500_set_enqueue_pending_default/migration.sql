@@ -1,0 +1,2 @@
+ALTER TABLE "public"."Log"
+  ALTER COLUMN "status" SET DEFAULT 'ENQUEUE_PENDING';

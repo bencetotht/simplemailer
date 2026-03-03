@@ -57,7 +57,7 @@ services:
     build:
       context: .
       dockerfile: apps/worker/Dockerfile
-    command: ["bunx", "prisma", "migrate", "deploy", "--schema", "packages/database/prisma/schema.prisma"]
+    command: ["bunx", "prisma", "migrate", "deploy", "--config", "packages/database/prisma/prisma.config.ts", "--schema", "packages/database/prisma/schema.prisma"]
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailer
     depends_on:

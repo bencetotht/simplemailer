@@ -25,7 +25,4 @@ ALTER TABLE "public"."Log"
   ADD COLUMN IF NOT EXISTS "lastAttemptAt" TIMESTAMP(3),
   ADD COLUMN IF NOT EXISTS "failureClass" TEXT;
 
-ALTER TABLE "public"."Log"
-  ALTER COLUMN "status" SET DEFAULT 'ENQUEUE_PENDING';
-
 CREATE UNIQUE INDEX IF NOT EXISTS "Log_enqueueKey_key" ON "public"."Log"("enqueueKey");

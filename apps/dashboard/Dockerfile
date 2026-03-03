@@ -15,7 +15,7 @@ COPY --from=deps /app/packages/database/node_modules ./packages/database/node_mo
 COPY package.json bun.lock* ./
 COPY apps/dashboard ./apps/dashboard
 COPY packages/database ./packages/database
-RUN cd packages/database && bunx prisma generate && cd /app/apps/dashboard && bun run build
+RUN cd packages/database && bunx prisma generate --config prisma/prisma.config.ts --schema prisma/schema.prisma && cd /app/apps/dashboard && bun run build
 
 FROM oven/bun:1.3.9 AS runner
 WORKDIR /app

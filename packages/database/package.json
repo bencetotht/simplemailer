@@ -16,10 +16,10 @@
     }
   },
   "scripts": {
-    "db:generate": "prisma generate",
-    "db:migrate": "prisma migrate dev",
-    "db:deploy": "prisma migrate deploy",
-    "db:studio": "prisma studio",
+    "db:generate": "prisma generate --config prisma/prisma.config.ts --schema prisma/schema.prisma",
+    "db:migrate": "prisma migrate dev --config prisma/prisma.config.ts --schema prisma/schema.prisma",
+    "db:deploy": "prisma migrate deploy --config prisma/prisma.config.ts --schema prisma/schema.prisma",
+    "db:studio": "prisma studio --config prisma/prisma.config.ts --schema prisma/schema.prisma",
     "clean": "rm -rf generated"
   },
   "keywords": [],
@@ -27,12 +27,14 @@
   "license": "ISC",
   "devDependencies": {
     "@types/node": "^24.2.0",
-    "prisma": "6.19.2",
+    "prisma": "7.4.2",
     "tsx": "^4.20.3",
     "typescript": "^5.9.2"
   },
   "dependencies": {
-    "@prisma/client": "6.19.2",
+    "@prisma/adapter-pg": "7.4.2",
+    "@prisma/client": "7.4.2",
+    "@prisma/client-runtime-utils": "7.4.2",
     "@prisma/extension-accelerate": "^2.0.2"
   }
 }
