@@ -190,6 +190,7 @@ export const getTemplates = async (): Promise<Template[]> => {
 
 export const getTemplateContent = async (id: string): Promise<string> => {
   const res = await fetch(`${API_URL}/template/${id}`);
+  if (!res.ok) throw new Error(`Failed to load template ${id}`);
   return res.text();
 };
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -10,11 +10,22 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import { getAccounts, getTemplates, sendMail, type Account, type Template } from "@/lib/api";
+import { getAccounts, getTemplateContent, getTemplates, sendMail, type Account, type Template } from "@/lib/api";
 import { mailJobSchema } from "@/lib/validators";
 import { Plus, Trash2, Send } from "lucide-react";
 
 interface KVRow { key: string; value: string; }
+
+const JINJA_VARIABLE_REGEX = /{{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*}}/g;
+
+function extractTemplateVariables(content: string): string[] {
+  const variables = new Set<string>();
+  for (const match of content.matchAll(JINJA_VARIABLE_REGEX)) {
+    const variable = match[1]?.trim();
+    if (variable) variables.add(variable);
+  }
+  return Array.from(variables).sort((a, b) => a.localeCompare(b));
+}
 
 export default function SendPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -26,6 +37,9 @@ export default function SendPage() {
   const [jsonMode, setJsonMode] = useState(false);
   const [jsonRaw, setJsonRaw] = useState('{}');
   const [jsonError, setJsonError] = useState('');
+  const [templateVariables, setTemplateVariables] = useState<string[]>([]);
+  const [templateVarsLoading, setTemplateVarsLoading] = useState(false);
+  const [templateVarsError, setTemplateVarsError] = useState('');
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [sending, setSending] = useState(false);
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -34,6 +48,57 @@ export default function SendPage() {
     getAccounts().then(setAccounts).catch(() => []);
     getTemplates().then(setTemplates).catch(() => []);
   }, []);
+
+  useEffect(() => {
+    let isActive = true;
+
+    if (!templateId) {
+      setTemplateVariables([]);
+      setTemplateVarsError('');
+      setTemplateVarsLoading(false);
+      return;
+    }
+
+    setTemplateVarsLoading(true);
+    setTemplateVarsError('');
+
+    getTemplateContent(templateId)
+      .then((content) => {
+        if (!isActive) return;
+        setTemplateVariables(extractTemplateVariables(content));
+      })
+      .catch(() => {
+        if (!isActive) return;
+        setTemplateVariables([]);
+        setTemplateVarsError('Failed to load template variables.');
+      })
+      .finally(() => {
+        if (isActive) setTemplateVarsLoading(false);
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [templateId]);
+
+  const providedValueKeys = useMemo(() => {
+    if (jsonMode) {
+      try {
+        const parsed = JSON.parse(jsonRaw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return new Set<string>();
+        return new Set(Object.keys(parsed as Record<string, unknown>).map((k) => k.trim()).filter(Boolean));
+      } catch {
+        return new Set<string>();
+      }
+    }
+
+    return new Set(kvRows.map((row) => row.key.trim()).filter(Boolean));
+  }, [jsonMode, jsonRaw, kvRows]);
+
+  const missingTemplateVariables = useMemo(
+    () => templateVariables.filter((variable) => !providedValueKeys.has(variable)),
+    [templateVariables, providedValueKeys],
+  );
 
   const buildValues = (): Record<string, unknown> | null => {
     if (jsonMode) {
@@ -89,6 +154,48 @@ export default function SendPage() {
 
   const removeRow = (i: number) => setKvRows((rows) => rows.filter((_, idx) => idx !== i));
 
+  const autofillJsonKeys = () => {
+    let base: Record<string, unknown> = {};
+
+    try {
+      const parsed = JSON.parse(jsonRaw);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        base = parsed as Record<string, unknown>;
+      }
+    } catch {
+      // Ignore invalid JSON and start from an empty object.
+    }
+
+    const next: Record<string, unknown> = { ...base };
+    for (const variable of templateVariables) {
+      if (!(variable in next)) next[variable] = '';
+    }
+
+    setJsonRaw(JSON.stringify(next, null, 2));
+    setJsonError('');
+  };
+
+  const autofillKvKeys = () => {
+    if (templateVariables.length === 0) return;
+
+    const valuesByKey = new Map<string, string>();
+    for (const row of kvRows) {
+      const key = row.key.trim();
+      if (key && !valuesByKey.has(key)) valuesByKey.set(key, row.value);
+    }
+
+    const existingTemplateKeys = new Set(
+      kvRows.map((row) => row.key.trim()).filter((key) => templateVariables.includes(key)),
+    );
+    const missingRows = templateVariables
+      .filter((variable) => !existingTemplateKeys.has(variable))
+      .map((variable) => ({ key: variable, value: valuesByKey.get(variable) ?? '' }));
+
+    if (missingRows.length > 0) {
+      setKvRows((rows) => [...rows, ...missingRows]);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -135,6 +242,43 @@ export default function SendPage() {
               </SelectContent>
             </Select>
             {errors.templateId && <p className="text-xs text-red-500">{errors.templateId}</p>}
+
+            {templateId && (
+              <div className="rounded-md border border-dashed p-3 space-y-2">
+                <p className="text-sm font-medium">Detected Template Variables</p>
+
+                {templateVarsLoading && <p className="text-xs text-muted-foreground">Loading template variables…</p>}
+
+                {!templateVarsLoading && templateVarsError && (
+                  <p className="text-xs text-red-500">{templateVarsError}</p>
+                )}
+
+                {!templateVarsLoading && !templateVarsError && templateVariables.length === 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    No placeholders matching <code>{'{{ variable_name }}'}</code> were found.
+                  </p>
+                )}
+
+                {!templateVarsLoading && !templateVarsError && templateVariables.length > 0 && (
+                  <>
+                    <div className="flex flex-wrap gap-2">
+                      {templateVariables.map((variable) => (
+                        <code key={variable} className="rounded bg-muted px-2 py-1 text-xs">
+                          {variable}
+                        </code>
+                      ))}
+                    </div>
+                    {missingTemplateVariables.length > 0 ? (
+                      <p className="text-xs text-amber-600 dark:text-amber-400">
+                        Missing values: {missingTemplateVariables.join(', ')}
+                      </p>
+                    ) : (
+                      <p className="text-xs text-green-700 dark:text-green-400">All template variables are provided.</p>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-1.5">
@@ -160,6 +304,17 @@ export default function SendPage() {
 
             {jsonMode ? (
               <div className="grid gap-1.5">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={autofillJsonKeys}
+                    disabled={templateVariables.length === 0 || templateVarsLoading}
+                  >
+                    Autofill Template Keys
+                  </Button>
+                </div>
                 <Textarea
                   className="font-mono text-sm"
                   rows={6}
@@ -171,6 +326,17 @@ export default function SendPage() {
               </div>
             ) : (
               <div className="space-y-2">
+                <div className="flex justify-end">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={autofillKvKeys}
+                    disabled={templateVariables.length === 0 || templateVarsLoading}
+                  >
+                    Autofill Template Keys
+                  </Button>
+                </div>
                 {kvRows.map((row, i) => (
                   <div key={i} className="flex gap-2 items-center">
                     <Input
