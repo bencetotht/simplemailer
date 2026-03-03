@@ -3,7 +3,7 @@ import { z } from "zod";
 export const mailJobSchema = z.object({
   accountId: z.string().min(1),
   templateId: z.string().min(1),
-  recipient: z.string().min(1),
+  recipient: z.string().email(),
   values: z.record(z.unknown()),
 });
 

@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
-import { getQueueMessages } from "@/lib/queue";
+import { NextRequest, NextResponse } from "next/server";
+import { requireApiKey } from "@/lib/auth";
+import { getQueueMessages, redactQueueMessages } from "@/lib/queue";
 
 /**
  * @swagger
@@ -19,7 +20,10 @@ import { getQueueMessages } from "@/lib/queue";
  *                 type: object
  *                 additionalProperties: true
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const jobs = await getQueueMessages("mailer");
-  return NextResponse.json(jobs);
+  return NextResponse.json(redactQueueMessages(jobs));
 }

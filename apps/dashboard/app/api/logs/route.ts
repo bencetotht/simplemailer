@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireApiKey } from "@/lib/auth";
 
 /**
  * @swagger
@@ -25,7 +26,7 @@ import { prisma } from "@/lib/db";
  *         name: status
  *         schema:
  *           type: string
- *           enum: [PENDING, SENT, FAILED, RETRYING]
+ *           enum: [ENQUEUE_PENDING, QUEUED, PROCESSING, PENDING, SENT, FAILED, RETRYING, DEAD]
  *         description: Filter by status
  *       - in: query
  *         name: recipient
@@ -37,6 +38,9 @@ import { prisma } from "@/lib/db";
  *         description: Paginated log entries
  */
 export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   const skip = parseInt(searchParams.get("skip") ?? "0", 10);
   const take = parseInt(searchParams.get("take") ?? "20", 10);
@@ -44,7 +48,19 @@ export async function GET(request: NextRequest) {
   const recipient = searchParams.get("recipient") ?? undefined;
 
   const where = {
-    ...(status ? { status: status as "PENDING" | "SENT" | "FAILED" | "RETRYING" } : {}),
+    ...(status
+      ? {
+          status: status as
+            | "ENQUEUE_PENDING"
+            | "QUEUED"
+            | "PROCESSING"
+            | "PENDING"
+            | "SENT"
+            | "FAILED"
+            | "RETRYING"
+            | "DEAD",
+        }
+      : {}),
     ...(recipient ? { recipient: { contains: recipient, mode: "insensitive" as const } } : {}),
   };
 

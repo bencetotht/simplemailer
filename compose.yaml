@@ -8,8 +8,8 @@ services:
       - 5672:5672
       - 15672:15672
     environment:
-      - RABBITMQ_DEFAULT_USER=root
-      - RABBITMQ_DEFAULT_PASS=root
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER:-mailer}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASS:-change-me}
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "ping"]
       interval: 10s
@@ -35,14 +35,14 @@ services:
       start_period: 10s
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:${MINIO_IMAGE_TAG:-RELEASE.2024-12-18T13-15-44Z}
     container_name: minio
     ports:
       - 9000:9000
       - 9001:9001
     environment:
-      - MINIO_ROOT_USER=minioadmin
-      - MINIO_ROOT_PASSWORD=minioadmin
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-change-me}
     volumes:
       - minio_data:/data
     command: server /data --console-address ":9001"
@@ -73,7 +73,12 @@ services:
       - 3001:3000
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailer
-      - RABBITMQ_URL=amqp://root:root@rabbitmq:5672
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-mailer}:${RABBITMQ_PASS:-change-me}@rabbitmq:5672
+      - RABBITMQ_API_URL=http://rabbitmq:15672
+      - RABBITMQ_API_USER=${RABBITMQ_USER:-mailer}
+      - RABBITMQ_API_PASS=${RABBITMQ_PASS:-change-me}
+      - DASHBOARD_API_KEY=${DASHBOARD_API_KEY}
+      - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}
     depends_on:
       postgres:
         condition: service_healthy
@@ -90,12 +95,14 @@ services:
       - 9091:9091
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailer
-      - RABBITMQ_URL=amqp://root:root@rabbitmq:5672
+      - RABBITMQ_URL=amqp://${RABBITMQ_USER:-mailer}:${RABBITMQ_PASS:-change-me}@rabbitmq:5672
       - S3_ENDPOINT=minio
       - S3_PORT=9000
-      - S3_ACCESS_KEY=minioadmin
-      - S3_SECRET_KEY=minioadmin
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-change-me}
       - CONFIG_PATH=/app/config.yaml
+      - SMTP_TLS_REJECT_UNAUTHORIZED=true
+      - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}
     depends_on:
       postgres:
         condition: service_healthy

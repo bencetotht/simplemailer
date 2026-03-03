@@ -1,25 +1,25 @@
 accounts:
   - name: "Account 1"
     username: "account1@example.com"
-    password: "password"
+    password: "env:MAIL_ACCOUNT_1_PASSWORD"
     emailHost: "smtp.example.com"
     emailPort: 587
   - name: "Account 2"
     username: "account2@example.com"
-    password: "my bad i forgot it"
+    password: "env:MAIL_ACCOUNT_2_PASSWORD"
     emailHost: "smtp.example.com"
     emailPort: 587
 
 buckets:
   - name: "bucket1"
     path: "bucket1"
-    accessKeyId: "accessKeyId"
-    secretAccessKey: "secretAccessKey"
+    accessKeyId: "env:BUCKET1_ACCESS_KEY_ID"
+    secretAccessKey: "env:BUCKET1_SECRET_ACCESS_KEY"
     region: "region"
   - name: "bucket2"
     path: "templates"
-    accessKeyId: "accessKeyId"
-    secretAccessKey: "secretAccessKey"
+    accessKeyId: "env:BUCKET2_ACCESS_KEY_ID"
+    secretAccessKey: "env:BUCKET2_SECRET_ACCESS_KEY"
     region: "region"
 
 templates:

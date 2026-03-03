@@ -8,6 +8,9 @@ export interface Stats {
   failed: number;
   pending: number;
   retrying: number;
+  queued?: number;
+  processing?: number;
+  dead?: number;
   successRate: number;
 }
 
@@ -226,7 +229,14 @@ export interface MailJobRequest {
   values: Record<string, unknown>;
 }
 
-export const sendMail = async (data: MailJobRequest): Promise<{ success: boolean; message?: string }> => {
+export interface SendMailResponse {
+  success: boolean;
+  message?: string;
+  jobId?: string;
+  status?: string;
+}
+
+export const sendMail = async (data: MailJobRequest): Promise<SendMailResponse> => {
   const res = await fetch(`${API_URL}/send`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

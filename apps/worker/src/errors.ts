@@ -1,21 +1,28 @@
-export class MailerError extends Error {
-  // Thrown when sending fails transiently — safe to retry
+export class RetryableMailError extends Error {
+  // Safe to retry (network issues, SMTP 4xx, temporary outages)
   constructor(message: string) {
     super(message);
-    this.name = 'MailerError';
+    this.name = 'RetryableMailError';
   }
 }
 
-export class MailerMaxRetriesError extends Error {
-  // Thrown when all retry attempts are exhausted
+export class PermanentMailError extends Error {
+  // Do not retry (invalid recipient/account/template/provider 5xx policy failures)
   constructor(message: string) {
     super(message);
-    this.name = 'MailerMaxRetriesError';
+    this.name = 'PermanentMailError';
   }
 }
 
-export class ValueError extends Error {
-  // Thrown for permanent failures (bad input, missing record) — do not retry
+export class CircuitOpenError extends RetryableMailError {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CircuitOpenError';
+  }
+}
+
+export class ValueError extends PermanentMailError {
+  // Permanent failure in config/input/storage layers
   constructor(message: string) {
     super(message);
     this.name = 'ValueError';
