@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireApiKey } from "@/lib/auth";
+import { encryptSecret } from "@/lib/secrets";
 import { accountSchema } from "@/lib/validators";
 
 /**
@@ -60,6 +62,9 @@ import { accountSchema } from "@/lib/validators";
  *               $ref: '#/components/schemas/SuccessResponse'
  */
 export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id") ?? undefined;
 
@@ -82,6 +87,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const body = await request.json();
   const parsed = accountSchema.safeParse(body);
 
@@ -93,11 +101,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await prisma.account.create({ data: parsed.data });
+    const encryptedPassword = encryptSecret(parsed.data.password);
+    const result = await prisma.account.create({
+      data: {
+        name: parsed.data.name,
+        username: parsed.data.username,
+        emailHost: parsed.data.emailHost,
+        emailPort: parsed.data.emailPort,
+        passwordEnc: encryptedPassword,
+        password: null,
+      },
+    });
     return NextResponse.json({ success: true, message: result.id });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { success: false, message: (error as Error).message },
+      { success: false, message: "Failed to create account" },
       { status: 500 }
     );
   }

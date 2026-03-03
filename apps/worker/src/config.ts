@@ -3,26 +3,59 @@ import * as yaml from 'yaml';
 import * as fs from 'fs';
 import * as os from 'os';
 import { ConfigError } from './errors';
+import { encryptSecret } from './secrets';
 import type { WorkerConfig } from './types';
 
+function parseNumber(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    throw new ConfigError(`${name} must be a positive number`);
+  }
+  return parsed;
+}
+
+function parseBoolean(name: string, fallback: boolean): boolean {
+  const raw = process.env[name];
+  if (raw === undefined) return fallback;
+  return raw === '1' || raw.toLowerCase() === 'true';
+}
+
+function validateRuntimeEnv(): void {
+  if (!process.env.RABBITMQ_URL) {
+    throw new ConfigError('RABBITMQ_URL is required');
+  }
+  if (process.env.NODE_ENV === 'production' && !process.env.SECRETS_MASTER_KEY) {
+    throw new ConfigError('SECRETS_MASTER_KEY is required in production');
+  }
+}
+
 export function resolveConfig(): WorkerConfig {
+  validateRuntimeEnv();
+
   const hostname = process.env.HOSTNAME || os.hostname();
   const randomSuffix = Math.random().toString(36).slice(2, 6);
   const workerId = `${hostname}-${randomSuffix}`;
 
   return {
-    rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://root:root@localhost:5672',
+    rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://localhost:5672',
     rabbitmqQueue: process.env.RABBITMQ_QUEUE || 'mailer',
-    prefetchCount: parseInt(process.env.PREFETCH_COUNT || '1', 10),
-    maxRetries: parseInt(process.env.MAX_RETRIES || '5', 10),
+    prefetchCount: parseNumber('PREFETCH_COUNT', 1),
+    maxRetries: parseNumber('MAX_RETRIES', 8),
+    publishConfirmTimeoutMs: parseNumber('PUBLISH_CONFIRM_TIMEOUT_MS', 5000),
     templatePath: process.env.TEMPLATE_PATH || '../../templates',
     s3Endpoint: process.env.S3_ENDPOINT,
-    s3Port: process.env.S3_PORT ? parseInt(process.env.S3_PORT, 10) : undefined,
+    s3Port: process.env.S3_PORT ? Number(process.env.S3_PORT) : undefined,
     s3AccessKey: process.env.S3_ACCESS_KEY,
     s3SecretKey: process.env.S3_SECRET_KEY,
     s3Bucket: process.env.S3_BUCKET,
-    metricsPort: parseInt(process.env.METRICS_PORT || '9091', 10),
-    heartbeatInterval: parseInt(process.env.HEARTBEAT_INTERVAL || '10000', 10),
+    metricsPort: parseNumber('METRICS_PORT', 9091),
+    heartbeatInterval: parseNumber('HEARTBEAT_INTERVAL', 10_000),
+    reconnectInitialDelayMs: parseNumber('RECONNECT_INITIAL_DELAY_MS', 1000),
+    reconnectMaxDelayMs: parseNumber('RECONNECT_MAX_DELAY_MS', 30_000),
+    enqueueReconcilerIntervalMs: parseNumber('ENQUEUE_RECONCILER_INTERVAL_MS', 15_000),
+    smtpRejectUnauthorized: parseBoolean('SMTP_TLS_REJECT_UNAUTHORIZED', true),
     workerId,
     workerVersion: '2.0.0',
   };
@@ -68,7 +101,7 @@ export async function seedFromConfigYaml(configPath: string): Promise<void> {
 
   console.log(
     `[config] Config loaded: ${(config.accounts ?? []).length} accounts, ` +
-    `${(config.buckets ?? []).length} buckets, ${(config.templates ?? []).length} templates`,
+      `${(config.buckets ?? []).length} buckets, ${(config.templates ?? []).length} templates`,
   );
 }
 
@@ -93,7 +126,8 @@ async function addAccount(account: Record<string, unknown>): Promise<void> {
       username,
       emailHost,
       emailPort: typeof emailPort === 'string' ? parseInt(emailPort, 10) : Number(emailPort),
-      password: resolvedPassword,
+      passwordEnc: encryptSecret(resolvedPassword),
+      password: null,
     },
   });
 }
@@ -121,7 +155,15 @@ async function addBucket(bucket: Record<string, unknown>): Promise<void> {
   }
 
   await prisma.bucket.create({
-    data: { name, path, accessKeyId: resolvedAccessKeyId, secretAccessKey: resolvedSecretAccessKey, region },
+    data: {
+      name,
+      path,
+      region,
+      accessKeyIdEnc: encryptSecret(resolvedAccessKeyId),
+      secretAccessKeyEnc: encryptSecret(resolvedSecretAccessKey),
+      accessKeyId: null,
+      secretAccessKey: null,
+    },
   });
 }
 

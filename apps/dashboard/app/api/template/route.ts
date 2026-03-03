@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireApiKey } from "@/lib/auth";
 import { templateCreateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
@@ -17,7 +18,10 @@ const TEMPLATES_DIR = path.join(process.cwd(), "../../templates");
  *       200:
  *         description: Array of template summaries
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const templates = await prisma.template.findMany({
     select: { id: true, name: true, subject: true, storageType: true, createdAt: true },
   });
@@ -33,6 +37,9 @@ export async function GET() {
  *     tags: [Templates]
  */
 export async function POST(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const body = await request.json();
   const parsed = templateCreateSchema.safeParse(body);
 
@@ -60,9 +67,9 @@ export async function POST(request: NextRequest) {
         );
       }
       fs.writeFileSync(filePath, content, "utf8");
-    } catch (error) {
+    } catch {
       return NextResponse.json(
-        { success: false, message: `Failed to write template file: ${(error as Error).message}` },
+        { success: false, message: "Failed to write template file" },
         { status: 500 }
       );
     }
@@ -73,13 +80,13 @@ export async function POST(request: NextRequest) {
       data: { name, subject, filename, storageType },
     });
     return NextResponse.json({ success: true, message: result.id });
-  } catch (error) {
+  } catch {
     // Roll back file write if DB fails
     if (storageType === "LOCAL") {
       try { fs.unlinkSync(path.join(TEMPLATES_DIR, filename)); } catch { /* ignore */ }
     }
     return NextResponse.json(
-      { success: false, message: (error as Error).message },
+      { success: false, message: "Failed to create template" },
       { status: 500 }
     );
   }

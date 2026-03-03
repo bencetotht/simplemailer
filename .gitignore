@@ -139,7 +139,6 @@ vite.config.ts.timestamp-*
 
 .envrc
 
-migrations/
 generated/
 
 cache/

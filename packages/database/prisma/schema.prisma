@@ -13,7 +13,8 @@ model Account {
   id        String   @id @default(cuid())
   name      String
   username  String   @unique // App User / Email address
-  password  String // App Password
+  password  String? // Legacy plaintext app password
+  passwordEnc String? // Encrypted app password envelope
   emailHost String // SMTP Host
   emailPort Int @default(587) // SMTP Port
   createdAt DateTime @default(now())
@@ -40,8 +41,10 @@ model Bucket {
   id        String   @id @default(cuid())
   name      String   @unique
   path      String
-  accessKeyId String
-  secretAccessKey String
+  accessKeyId String? // Legacy plaintext access key
+  secretAccessKey String? // Legacy plaintext secret key
+  accessKeyIdEnc String? // Encrypted access key envelope
+  secretAccessKeyEnc String? // Encrypted secret key envelope
   region String
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -57,8 +60,13 @@ model Log {
   templateId  String
   template    Template  @relation(fields: [templateId], references: [id])
   values      Json      @default("{}")
-  status      Status    @default(PENDING)
+  status      Status    @default(ENQUEUE_PENDING)
+  enqueueKey  String?   @unique
+  correlationId String?
   retryCount  Int       @default(0)
+  nextAttemptAt DateTime?
+  lastAttemptAt DateTime?
+  failureClass String?
   lastError   String?
   completedAt DateTime?
   createdAt   DateTime  @default(now())
@@ -68,6 +76,7 @@ model Log {
   @@index([status, createdAt])
 }
 
+// Worker statuses
 model WorkerHeartbeat {
   id            String   @id
   startedAt     DateTime @default(now())
@@ -84,8 +93,12 @@ enum STORAGE_TYPE {
 }
 
 enum Status {
+  ENQUEUE_PENDING
+  QUEUED
+  PROCESSING
   PENDING
   SENT
   FAILED
   RETRYING
+  DEAD
 }

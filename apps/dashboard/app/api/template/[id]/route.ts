@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireApiKey } from "@/lib/auth";
 import { templateUpdateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
@@ -10,14 +11,17 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauthorized = requireApiKey(_request);
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
 
   try {
     await prisma.template.delete({ where: { id } });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { success: false, message: (error as Error).message },
+      { success: false, message: "Failed to delete template" },
       { status: 500 }
     );
   }
@@ -41,6 +45,9 @@ export async function GET(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauthorized = requireApiKey(_request);
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
 
   const template = await prisma.template.findUnique({ where: { id } });
@@ -78,6 +85,9 @@ export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const { id } = await params;
 
   const template = await prisma.template.findUnique({ where: { id } });
@@ -100,9 +110,9 @@ export async function PATCH(
   if (content !== undefined && template.storageType === "LOCAL") {
     try {
       fs.writeFileSync(path.join(TEMPLATES_DIR, template.filename), content, "utf8");
-    } catch (error) {
+    } catch {
       return NextResponse.json(
-        { success: false, message: `Failed to write template file: ${(error as Error).message}` },
+        { success: false, message: "Failed to write template file" },
         { status: 500 }
       );
     }
@@ -117,9 +127,9 @@ export async function PATCH(
       },
     });
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { success: false, message: (error as Error).message },
+      { success: false, message: "Failed to update template" },
       { status: 500 }
     );
   }

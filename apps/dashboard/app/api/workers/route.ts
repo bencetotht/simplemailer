@@ -1,5 +1,6 @@
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "database";
+import { requireApiKey } from "@/lib/auth";
 
 /**
  * @swagger
@@ -12,7 +13,10 @@ import { prisma } from "database";
  *       200:
  *         description: Array of active worker heartbeat records
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const thirtySecondsAgo = new Date(Date.now() - 30_000);
   const workers = await prisma.workerHeartbeat.findMany({
     where: {

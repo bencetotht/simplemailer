@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
+import { requireApiKey } from "@/lib/auth";
+import { encryptSecret } from "@/lib/secrets";
 import { bucketSchema } from "@/lib/validators";
 
 /**
@@ -48,7 +50,10 @@ import { bucketSchema } from "@/lib/validators";
  *             schema:
  *               $ref: '#/components/schemas/SuccessResponse'
  */
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const buckets = await prisma.bucket.findMany({
     select: { id: true, name: true, path: true, region: true },
   });
@@ -56,6 +61,9 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
+  const unauthorized = requireApiKey(request);
+  if (unauthorized) return unauthorized;
+
   const body = await request.json();
   const parsed = bucketSchema.safeParse(body);
 
@@ -67,11 +75,21 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await prisma.bucket.create({ data: parsed.data });
+    const result = await prisma.bucket.create({
+      data: {
+        name: parsed.data.name,
+        path: parsed.data.path,
+        region: parsed.data.region,
+        accessKeyIdEnc: encryptSecret(parsed.data.accessKeyId),
+        secretAccessKeyEnc: encryptSecret(parsed.data.secretAccessKey),
+        accessKeyId: null,
+        secretAccessKey: null,
+      },
+    });
     return NextResponse.json({ success: true, message: result.id });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
-      { success: false, message: (error as Error).message },
+      { success: false, message: "Failed to create bucket" },
       { status: 500 }
     );
   }
