@@ -259,7 +259,7 @@ export default function TemplatesPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     const data = await getTemplates().catch(() => []);
-    setTemplates(data);
+    setTemplates(Array.isArray(data) ? data : []);
     setIsLoading(false);
   }, []);
 

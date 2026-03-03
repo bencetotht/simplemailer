@@ -32,7 +32,7 @@ export default function AccountsPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     const data = await getAccounts().catch(() => []);
-    setAccounts(data);
+    setAccounts(Array.isArray(data) ? data : []);
     setIsLoading(false);
   }, []);
 

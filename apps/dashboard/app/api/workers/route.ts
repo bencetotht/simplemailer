@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "database";
 import { requireApiKey } from "@/lib/auth";
+import { logServerError } from "@/lib/log";
 
 /**
  * @swagger
@@ -17,12 +18,17 @@ export async function GET(request: NextRequest) {
   const unauthorized = requireApiKey(request);
   if (unauthorized) return unauthorized;
 
-  const thirtySecondsAgo = new Date(Date.now() - 30_000);
-  const workers = await prisma.workerHeartbeat.findMany({
-    where: {
-      lastHeartbeat: { gte: thirtySecondsAgo },
-    },
-    orderBy: { lastHeartbeat: "desc" },
-  });
-  return NextResponse.json(workers);
+  try {
+    const thirtySecondsAgo = new Date(Date.now() - 30_000);
+    const workers = await prisma.workerHeartbeat.findMany({
+      where: {
+        lastHeartbeat: { gte: thirtySecondsAgo },
+      },
+      orderBy: { lastHeartbeat: "desc" },
+    });
+    return NextResponse.json(workers);
+  } catch (error) {
+    logServerError("api.workers.query_failed", error);
+    return NextResponse.json([], { status: 200 });
+  }
 }

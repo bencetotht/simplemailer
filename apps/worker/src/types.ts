@@ -33,6 +33,10 @@ export interface WorkerConfig {
   s3Bucket?: string;
   metricsPort: number;
   heartbeatInterval: number;
+  heartbeatMaxRetries: number;
+  heartbeatRetryBaseDelayMs: number;
+  heartbeatFailureThreshold: number;
+  heartbeatStaleAfterMs: number;
   reconnectInitialDelayMs: number;
   reconnectMaxDelayMs: number;
   enqueueReconcilerIntervalMs: number;

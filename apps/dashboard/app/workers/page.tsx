@@ -39,7 +39,7 @@ export default function WorkersPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     const data = await getWorkers().catch(() => []);
-    setWorkers(data);
+    setWorkers(Array.isArray(data) ? data : []);
     setIsLoading(false);
   }, []);
 

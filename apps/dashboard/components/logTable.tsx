@@ -24,7 +24,7 @@ export interface LogEntry {
 }
 
 interface LogTableProps {
-  data: Partial<LogEntry>[]
+  data?: Partial<LogEntry>[]
   className?: string
   isLoading?: boolean
   showExtra?: boolean
@@ -48,6 +48,7 @@ const getStatusVariant = (status: string) => {
 const tableHeadStyle = "font-medium text-muted-foreground text-xs uppercase tracking-wider pb-3"
 
 export function LogTable({ data, className, isLoading, showExtra = false }: LogTableProps) {
+  const rows = Array.isArray(data) ? data : [];
   const colCount = showExtra ? 8 : 6;
 
   const skeletonRows = Array.from({ length: 5 }, (_, index) => (
@@ -78,7 +79,7 @@ export function LogTable({ data, className, isLoading, showExtra = false }: LogT
             skeletonRows
           ) : (
             <>
-              {data.map((entry, index) => (
+              {rows.map((entry, index) => (
                 <TableRow key={index} className="border-b border-border hover:bg-muted/50 transition-colors">
                   <TableCell className="py-3 text-sm text-foreground font-mono">{entry.id}</TableCell>
                   <TableCell className="py-3">
@@ -94,7 +95,7 @@ export function LogTable({ data, className, isLoading, showExtra = false }: LogT
                   {showExtra && <TableCell className="py-3 text-sm text-muted-foreground">{formatDate(entry.completedAt)}</TableCell>}
                 </TableRow>
               ))}
-              {data.length === 0 && (
+              {rows.length === 0 && (
                 <TableRow>
                   <TableCell colSpan={colCount} className="text-center text-muted-foreground py-8 text-sm">
                     No data available

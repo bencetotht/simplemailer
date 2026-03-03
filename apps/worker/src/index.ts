@@ -6,7 +6,12 @@ import { CircuitBreaker } from './circuit-breaker';
 import { resolveConfig, seedFromConfigYaml } from './config';
 import { startConsumer } from './consumer';
 import { deregisterWorker, registerWorker, startHeartbeatLoop } from './health';
-import { createMetrics, startMetricsServer, startMetricsUpdater } from './metrics';
+import {
+  createMetrics,
+  startMetricsServer,
+  startMetricsUpdater,
+  type WorkerHealthSnapshot,
+} from './metrics';
 import { logRedactedError } from './log';
 import { connectRabbitMQ, setupTopology } from './queue';
 import { startEnqueueReconciler } from './reconciler';
@@ -46,12 +51,64 @@ async function main() {
     await seedFromConfigYaml(configPath);
   }
 
-  const heartbeat = startHeartbeatLoop(config.workerId, config.heartbeatInterval);
   await registerWorker(config.workerId, config.workerVersion);
   console.log(`[worker] Registered heartbeat for ${config.workerId}`);
+  const heartbeat = startHeartbeatLoop({
+    id: config.workerId,
+    version: config.workerVersion,
+    intervalMs: config.heartbeatInterval,
+    maxRetries: config.heartbeatMaxRetries,
+    retryBaseDelayMs: config.heartbeatRetryBaseDelayMs,
+    failureThreshold: config.heartbeatFailureThreshold,
+    staleAfterMs: config.heartbeatStaleAfterMs,
+    onConnectivityChange: (event) => {
+      const message =
+        `[health] connectivity state=${event.healthy ? 'healthy' : 'unhealthy'} ` +
+        `reason=${event.reason} workerId=${event.workerId} failures=${event.consecutiveFailures} ` +
+        `retryAttempt=${event.retryAttempt}${event.lastError ? ` error=${event.lastError}` : ''}`;
 
-  const metricsServer = startMetricsServer(metrics, config.metricsPort, () => isReady);
-  const metricsUpdater = startMetricsUpdater(metrics, () => currentChannel);
+      if (event.healthy) {
+        console.log(message);
+      } else {
+        console.error(message);
+      }
+    },
+  });
+
+  const getHealthSnapshot = (): WorkerHealthSnapshot => {
+    const heartbeatStatus = heartbeat.getStatus();
+    const amqpReady = isReady;
+    const heartbeatHealthy = heartbeatStatus.healthy;
+    const healthy = heartbeatHealthy;
+
+    return {
+      healthy,
+      amqpReady,
+      heartbeatHealthy,
+      consecutiveHeartbeatFailures: heartbeatStatus.consecutiveFailures,
+      heartbeatInRetry: heartbeatStatus.inRetry,
+      heartbeatRetryAttempt: heartbeatStatus.currentRetryAttempt,
+      lastHeartbeatSuccessAt: heartbeatStatus.lastSuccessAt
+        ? heartbeatStatus.lastSuccessAt.toISOString()
+        : null,
+      lastHeartbeatFailureAt: heartbeatStatus.lastFailureAt
+        ? heartbeatStatus.lastFailureAt.toISOString()
+        : null,
+      heartbeatLastError: heartbeatStatus.lastError,
+    };
+  };
+
+  const metricsServer = startMetricsServer(
+    metrics,
+    config.metricsPort,
+    () => isReady,
+    getHealthSnapshot,
+  );
+  const metricsUpdater = startMetricsUpdater(
+    metrics,
+    () => currentChannel,
+    () => getHealthSnapshot().healthy,
+  );
   const reconciler = startEnqueueReconciler(() => currentChannel, config);
 
   const shutdown = async (signal: string) => {

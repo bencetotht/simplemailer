@@ -45,8 +45,8 @@ export default function SendPage() {
   const [feedback, setFeedback] = useState<{ ok: boolean; msg: string } | null>(null);
 
   useEffect(() => {
-    getAccounts().then(setAccounts).catch(() => []);
-    getTemplates().then(setTemplates).catch(() => []);
+    getAccounts().then((data) => setAccounts(Array.isArray(data) ? data : [])).catch(() => []);
+    getTemplates().then((data) => setTemplates(Array.isArray(data) ? data : [])).catch(() => []);
   }, []);
 
   useEffect(() => {

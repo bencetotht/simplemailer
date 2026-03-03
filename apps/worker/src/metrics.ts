@@ -11,6 +11,18 @@ export interface AutoscaleSnapshot {
   inFlight: number;
 }
 
+export interface WorkerHealthSnapshot {
+  healthy: boolean;
+  amqpReady: boolean;
+  heartbeatHealthy: boolean;
+  consecutiveHeartbeatFailures: number;
+  heartbeatInRetry: boolean;
+  heartbeatRetryAttempt: number;
+  lastHeartbeatSuccessAt: string | null;
+  lastHeartbeatFailureAt: string | null;
+  heartbeatLastError: string | null;
+}
+
 export interface Metrics {
   processedTotal: Counter;
   sendRate: Gauge;
@@ -156,6 +168,7 @@ export function startMetricsServer(
   metrics: Metrics,
   port: number,
   readiness: () => boolean,
+  healthSnapshot: () => WorkerHealthSnapshot,
 ): { stop: () => void } {
   const server = Bun.serve({
     port,
@@ -174,7 +187,14 @@ export function startMetricsServer(
       }
 
       if (url.pathname === '/healthz') {
-        return Response.json({ status: 'ok' });
+        const health = healthSnapshot();
+        return Response.json(
+          {
+            status: health.healthy ? 'ok' : 'unhealthy',
+            ...health,
+          },
+          { status: health.healthy ? 200 : 503 },
+        );
       }
 
       if (url.pathname === '/readyz') {
@@ -194,12 +214,13 @@ export function startMetricsServer(
 export function startMetricsUpdater(
   metrics: Metrics,
   getChannel: () => ConfirmChannel | null,
+  isHealthy: () => boolean,
 ): { stop: () => void } {
   const rateWindowSamples: number[] = [];
 
   const dbInterval = setInterval(async () => {
     try {
-      metrics.healthStatus.set(1);
+      metrics.healthStatus.set(isHealthy() ? 1 : 0);
       const channel = getChannel();
       const queueReady = channel ? await getQueueSize(channel) : 0;
       const dbMetrics = await getMetrics();

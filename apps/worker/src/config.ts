@@ -37,6 +37,8 @@ export function resolveConfig(): WorkerConfig {
   const hostname = process.env.HOSTNAME || os.hostname();
   const randomSuffix = Math.random().toString(36).slice(2, 6);
   const workerId = `${hostname}-${randomSuffix}`;
+  const heartbeatInterval = parseNumber('HEARTBEAT_INTERVAL', 10_000);
+  const heartbeatMaxRetries = parseNumber('HEARTBEAT_MAX_RETRIES', 3);
 
   return {
     rabbitmqUrl: process.env.RABBITMQ_URL || 'amqp://localhost:5672',
@@ -51,7 +53,14 @@ export function resolveConfig(): WorkerConfig {
     s3SecretKey: process.env.S3_SECRET_KEY,
     s3Bucket: process.env.S3_BUCKET,
     metricsPort: parseNumber('METRICS_PORT', 9091),
-    heartbeatInterval: parseNumber('HEARTBEAT_INTERVAL', 10_000),
+    heartbeatInterval,
+    heartbeatMaxRetries,
+    heartbeatRetryBaseDelayMs: parseNumber('HEARTBEAT_RETRY_BASE_DELAY_MS', 500),
+    heartbeatFailureThreshold: parseNumber('HEARTBEAT_FAILURE_THRESHOLD', 1),
+    heartbeatStaleAfterMs: parseNumber(
+      'HEARTBEAT_STALE_AFTER_MS',
+      Math.max(heartbeatInterval * 3, 30_000),
+    ),
     reconnectInitialDelayMs: parseNumber('RECONNECT_INITIAL_DELAY_MS', 1000),
     reconnectMaxDelayMs: parseNumber('RECONNECT_MAX_DELAY_MS', 30_000),
     enqueueReconcilerIntervalMs: parseNumber('ENQUEUE_RECONCILER_INTERVAL_MS', 15_000),

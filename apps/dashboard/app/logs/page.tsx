@@ -34,8 +34,8 @@ export default function LogsPage() {
       status: s || undefined,
       recipient: r || undefined,
     }).catch(() => ({ data: [], total: 0 }));
-    setLogs(res.data);
-    setTotal(res.total);
+    setLogs(Array.isArray(res.data) ? res.data : []);
+    setTotal(typeof res.total === 'number' ? res.total : 0);
     setIsLoading(false);
   }, []);
 

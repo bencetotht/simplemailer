@@ -32,7 +32,7 @@ export default function BucketsPage() {
   const load = useCallback(async () => {
     setIsLoading(true);
     const data = await getBuckets().catch(() => []);
-    setBuckets(data);
+    setBuckets(Array.isArray(data) ? data : []);
     setIsLoading(false);
   }, []);
 
