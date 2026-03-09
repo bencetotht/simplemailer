@@ -1,9 +1,26 @@
 import { randomUUID } from 'crypto';
 import type { ConfirmChannel } from 'amqplib';
 import { Status } from 'database';
-import { fetchStaleEnqueuePending, markQueuedAfterPublish, updateLogStatus } from './db';
+import { fetchDueEnqueuePending, markQueuedAfterPublish, updateLogStatus } from './db';
 import { publishMain } from './queue';
 import type { MailJob, QueueMessageV2, WorkerConfig } from './types';
+
+const DUE_ENQUEUE_CHUNK_SIZE = 50;
+
+export function isReadyForEnqueue(
+  log: {
+    scheduledFor: Date | null;
+    updatedAt: Date;
+  },
+  now: Date,
+  olderThanMs: number,
+): boolean {
+  if (log.scheduledFor) {
+    return log.scheduledFor.getTime() <= now.getTime();
+  }
+
+  return log.updatedAt.getTime() <= now.getTime() - olderThanMs;
+}
 
 export function startEnqueueReconciler(
   getChannel: () => ConfirmChannel | null,
@@ -14,8 +31,13 @@ export function startEnqueueReconciler(
     if (!channel) return;
 
     try {
-      const staleLogs = await fetchStaleEnqueuePending(100, 10_000);
-      for (const log of staleLogs) {
+      const now = new Date();
+      const dueLogs = await fetchDueEnqueuePending(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
+      for (const log of dueLogs) {
+        if (!isReadyForEnqueue(log, now, 10_000)) {
+          continue;
+        }
+
         const data: MailJob = {
           accountId: log.accountId,
           templateId: log.templateId,

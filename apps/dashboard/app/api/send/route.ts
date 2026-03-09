@@ -6,7 +6,7 @@ import { requireApiKey } from "@/lib/auth";
 import { logServerError } from "@/lib/log";
 import { consumeRateLimitToken } from "@/lib/rate-limit";
 import { mailJobSchema } from "@/lib/validators";
-import { publishToMailerQueue } from "@/lib/queue";
+import { publishLogRecords } from "@/lib/send-jobs";
 
 const NON_TERMINAL_STATUSES: Status[] = [
   Status.ENQUEUE_PENDING,
@@ -94,22 +94,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await publishToMailerQueue({
-      jobId: log.id,
-      attempt: 0,
+    const publishResult = await publishLogRecords([{
+      id: log.id,
+      accountId: parsed.data.accountId,
+      templateId: parsed.data.templateId,
+      recipient: parsed.data.recipient,
+      values: parsed.data.values as Prisma.JsonValue,
       correlationId,
-      data: parsed.data,
-    });
+    }]);
 
-    log = await prisma.log.update({
-      where: { id: log.id },
-      data: {
-        status: Status.QUEUED,
-        lastAttemptAt: new Date(),
-        lastError: null,
-        failureClass: null,
-      },
-    });
+    if (publishResult.failedIds.length > 0) {
+      return NextResponse.json(
+        { success: false, message: "Failed to enqueue mail job" },
+        { status: 503 },
+      );
+    }
+
+    log = await prisma.log.findUniqueOrThrow({ where: { id: log.id } });
 
     return NextResponse.json(
       { success: true, jobId: log.id, status: log.status },
@@ -117,13 +118,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     logServerError("api.send.publish_failed", error, { jobId: log.id });
-    await prisma.log.update({
-      where: { id: log.id },
-      data: {
-        lastError: error instanceof Error ? error.message : String(error),
-        failureClass: "PUBLISH_CONFIRM_FAILED",
-      },
-    });
     return NextResponse.json(
       { success: false, message: "Failed to enqueue mail job" },
       { status: 503 },

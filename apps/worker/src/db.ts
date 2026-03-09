@@ -7,7 +7,13 @@ import { decryptSecret } from './secrets';
 
 export async function createLog(
   data: MailJob,
-  opts?: { enqueueKey?: string | null; correlationId?: string | null },
+  opts?: {
+    enqueueKey?: string | null;
+    correlationId?: string | null;
+    bulkBatchId?: string | null;
+    bulkItemId?: string | null;
+    scheduledFor?: Date | null;
+  },
 ): Promise<Log> {
   return prisma.log.create({
     data: {
@@ -18,6 +24,9 @@ export async function createLog(
       status: Status.PENDING,
       enqueueKey: opts?.enqueueKey ?? null,
       correlationId: opts?.correlationId ?? null,
+      bulkBatchId: opts?.bulkBatchId ?? null,
+      bulkItemId: opts?.bulkItemId ?? null,
+      scheduledFor: opts?.scheduledFor ?? null,
     },
   });
 }
@@ -34,7 +43,7 @@ export async function updateLogStatus(
   },
 ): Promise<Log> {
   const isTerminal = status === Status.SENT || status === Status.FAILED || status === Status.DEAD;
-  return prisma.log.update({
+  const updatedLog = await prisma.log.update({
     where: { id },
     data: {
       status,
@@ -46,6 +55,26 @@ export async function updateLogStatus(
       ...(isTerminal && { completedAt: new Date() }),
     },
   });
+
+  if (isTerminal && updatedLog.bulkBatchId) {
+    const remaining = await prisma.log.count({
+      where: {
+        bulkBatchId: updatedLog.bulkBatchId,
+        status: {
+          in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.PROCESSING, Status.RETRYING, Status.PENDING],
+        },
+      },
+    });
+
+    if (remaining === 0) {
+      await prisma.bulkSendBatch.update({
+        where: { id: updatedLog.bulkBatchId },
+        data: { completedAt: new Date() },
+      });
+    }
+  }
+
+  return updatedLog;
 }
 
 export async function claimLogForProcessing(id: string): Promise<boolean> {
@@ -119,6 +148,42 @@ export async function validateAccount(accountId: string): Promise<void> {
 export async function validateTemplate(templateId: string): Promise<void> {
   const template = await prisma.template.findUnique({ where: { id: templateId } });
   if (!template) throw new ValueError(`Template ${templateId} not found`);
+}
+
+export async function fetchDueEnqueuePending(limit = 50, olderThanMs = 10_000): Promise<Log[]> {
+  const now = new Date();
+  const threshold = new Date(Date.now() - olderThanMs);
+  const [scheduledLogs, staleLogs] = await Promise.all([
+    prisma.log.findMany({
+      where: {
+        status: Status.ENQUEUE_PENDING,
+        scheduledFor: { not: null, lte: now },
+      },
+      orderBy: [
+        { scheduledFor: 'asc' },
+        { createdAt: 'asc' },
+      ],
+      take: limit,
+    }),
+    prisma.log.findMany({
+      where: {
+        status: Status.ENQUEUE_PENDING,
+        scheduledFor: null,
+        updatedAt: { lte: threshold },
+      },
+      orderBy: { createdAt: 'asc' },
+      take: limit,
+    }),
+  ]);
+
+  return [...scheduledLogs, ...staleLogs]
+    .sort((left, right) => {
+      const leftTime = left.scheduledFor?.getTime() ?? left.createdAt.getTime();
+      const rightTime = right.scheduledFor?.getTime() ?? right.createdAt.getTime();
+      if (leftTime !== rightTime) return leftTime - rightTime;
+      return left.createdAt.getTime() - right.createdAt.getTime();
+    })
+    .slice(0, limit);
 }
 
 export async function fetchStaleEnqueuePending(limit = 100, olderThanMs = 10_000): Promise<Log[]> {

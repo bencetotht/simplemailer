@@ -17,9 +17,11 @@ model Account {
   passwordEnc String? // Encrypted app password envelope
   emailHost String // SMTP Host
   emailPort Int @default(587) // SMTP Port
+  bulkNextAvailableAt DateTime?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   Log       Log[]
+  BulkSendBatch BulkSendBatch[]
 }
 
 // Templates
@@ -30,6 +32,7 @@ model Template {
   filename  String
   storageType STORAGE_TYPE @default(LOCAL)
   Log       Log[]
+  BulkSendBatch BulkSendBatch[]
   Bucket    Bucket?   @relation(fields: [bucketId], references: [id])
   bucketId  String?
   createdAt DateTime @default(now())
@@ -60,6 +63,11 @@ model Log {
   templateId  String
   template    Template  @relation(fields: [templateId], references: [id])
   values      Json      @default("{}")
+  bulkBatchId String?
+  bulkBatch   BulkSendBatch? @relation(fields: [bulkBatchId], references: [id])
+  bulkItemId  String?   @unique
+  bulkItem    BulkSendItem? @relation("BulkItemLog", fields: [bulkItemId], references: [id])
+  scheduledFor DateTime?
   status      Status    @default(ENQUEUE_PENDING)
   enqueueKey  String?   @unique
   correlationId String?
@@ -74,6 +82,49 @@ model Log {
 
   @@index([createdAt])
   @@index([status, createdAt])
+  @@index([status, scheduledFor, createdAt])
+  @@index([bulkBatchId])
+}
+
+model BulkSendBatch {
+  id                 String   @id @default(cuid())
+  accountId          String
+  account            Account  @relation(fields: [accountId], references: [id])
+  templateId         String
+  template           Template @relation(fields: [templateId], references: [id])
+  sharedValues       Json     @default("{}")
+  requestedCount     Int
+  acceptedCount      Int
+  rejectedCount      Int
+  enqueueKey         String?  @unique
+  correlationId      String?
+  requestedMinDelayMs Int?
+  effectiveMinDelayMs Int
+  completedAt        DateTime?
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  items              BulkSendItem[]
+  logs               Log[]
+
+  @@index([createdAt])
+  @@index([accountId, createdAt])
+}
+
+model BulkSendItem {
+  id              String   @id @default(cuid())
+  batchId         String
+  batch           BulkSendBatch @relation(fields: [batchId], references: [id])
+  sequence        Int
+  recipient       String
+  values          Json     @default("{}")
+  validationError String?
+  logId           String?
+  log             Log?     @relation("BulkItemLog")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([batchId, sequence])
+  @@index([batchId, validationError])
 }
 
 // Worker statuses

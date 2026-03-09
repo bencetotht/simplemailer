@@ -87,6 +87,254 @@
           }
         }
       },
+      "BulkSendRecipient": {
+        "type": "object",
+        "required": [
+          "recipient"
+        ],
+        "properties": {
+          "recipient": {
+            "type": "string",
+            "format": "email",
+            "example": "user@example.com"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Per-recipient template values that override sharedValues"
+          }
+        }
+      },
+      "BulkSendRequest": {
+        "type": "object",
+        "required": [
+          "accountId",
+          "templateId",
+          "recipients"
+        ],
+        "properties": {
+          "accountId": {
+            "type": "string",
+            "description": "ID of the SMTP account to send from"
+          },
+          "templateId": {
+            "type": "string",
+            "description": "ID of the template to render"
+          },
+          "sharedValues": {
+            "type": "object",
+            "additionalProperties": true,
+            "description": "Template values shared by every recipient",
+            "example": {
+              "campaignName": "March Launch",
+              "baseUrl": "https://example.com"
+            }
+          },
+          "recipients": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkSendRecipient"
+            },
+            "example": [
+              {
+                "recipient": "alice@example.com",
+                "values": {
+                  "name": "Alice",
+                  "confirmUrl": "https://example.com/a"
+                }
+              },
+              {
+                "recipient": "bob@example.com",
+                "values": {
+                  "name": "Bob",
+                  "confirmUrl": "https://example.com/b"
+                }
+              }
+            ]
+          },
+          "options": {
+            "type": "object",
+            "properties": {
+              "minDelayMs": {
+                "type": "integer",
+                "description": "Requested minimum spacing between accepted recipients. The server will clamp this to safe bounds.",
+                "example": 10000
+              }
+            }
+          }
+        }
+      },
+      "BulkSendRejectedItem": {
+        "type": "object",
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "recipient": {
+            "type": "string",
+            "nullable": true
+          },
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "BulkSendAcceptedResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "batchId": {
+            "type": "string"
+          },
+          "requestedCount": {
+            "type": "integer"
+          },
+          "acceptedCount": {
+            "type": "integer"
+          },
+          "rejectedCount": {
+            "type": "integer"
+          },
+          "effectiveMinDelayMs": {
+            "type": "integer"
+          },
+          "rejectedItems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkSendRejectedItem"
+            }
+          }
+        }
+      },
+      "BulkSendItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "sequence": {
+            "type": "integer"
+          },
+          "recipient": {
+            "type": "string"
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": true
+          },
+          "validationError": {
+            "type": "string",
+            "nullable": true
+          },
+          "logId": {
+            "type": "string",
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "REJECTED",
+              "ENQUEUE_PENDING",
+              "QUEUED",
+              "PROCESSING",
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING",
+              "DEAD"
+            ]
+          },
+          "scheduledFor": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "BulkSendBatchResponse": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "example": true
+          },
+          "batch": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "accountId": {
+                "type": "string"
+              },
+              "templateId": {
+                "type": "string"
+              },
+              "requestedCount": {
+                "type": "integer"
+              },
+              "acceptedCount": {
+                "type": "integer"
+              },
+              "rejectedCount": {
+                "type": "integer"
+              },
+              "requestedMinDelayMs": {
+                "type": "integer",
+                "nullable": true
+              },
+              "effectiveMinDelayMs": {
+                "type": "integer"
+              },
+              "completedAt": {
+                "type": "string",
+                "format": "date-time",
+                "nullable": true
+              },
+              "createdAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "countsByStatus": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkSendItem"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "skip": {
+            "type": "integer"
+          },
+          "take": {
+            "type": "integer"
+          }
+        }
+      },
       "AccountRequest": {
         "type": "object",
         "required": [
@@ -577,6 +825,131 @@
           },
           "500": {
             "description": "Failed to publish to queue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send/bulk": {
+      "post": {
+        "summary": "Queue a paced bulk mail batch",
+        "description": "Validates the payload, stores the batch and its recipients, applies DB-backed pacing per account, and immediately publishes any recipients that are already due.",
+        "tags": [
+          "Mail"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Bulk batch accepted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSendAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Validation failed or all recipients were rejected",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account or template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send/bulk/{id}": {
+      "get": {
+        "summary": "Inspect a bulk send batch",
+        "description": "Returns batch counts and paginated recipient item statuses for a paced bulk send.",
+        "tags": [
+          "Mail"
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skip",
+            "schema": {
+              "type": "integer",
+              "default": 0
+            }
+          },
+          {
+            "in": "query",
+            "name": "take",
+            "schema": {
+              "type": "integer",
+              "default": 50
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bulk batch details",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSendBatchResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bulk batch not found",
             "content": {
               "application/json": {
                 "schema": {

@@ -7,6 +7,23 @@ export const mailJobSchema = z.object({
   values: z.record(z.unknown()),
 });
 
+export const bulkMailRecipientSchema = z.object({
+  recipient: z.string().trim().min(1),
+  values: z.record(z.unknown()).optional().default({}),
+});
+
+export const bulkMailOptionsSchema = z.object({
+  minDelayMs: z.number().finite().nonnegative().optional(),
+}).optional();
+
+export const bulkMailJobSchema = z.object({
+  accountId: z.string().min(1),
+  templateId: z.string().min(1),
+  sharedValues: z.record(z.unknown()).optional().default({}),
+  recipients: z.array(bulkMailRecipientSchema).min(1).max(1000),
+  options: bulkMailOptionsSchema,
+});
+
 export const accountSchema = z.object({
   name: z.string().min(1),
   username: z.string().min(1),
