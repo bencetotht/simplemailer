@@ -22,6 +22,7 @@ import {
   Layout,
   Cpu,
   BookOpen,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -47,6 +48,12 @@ export function PageSideBar() {
       href: "/send",
       icon: Send,
       description: "Queue a mail job",
+    },
+    {
+      title: "Bulk Send",
+      href: "/send/bulk",
+      icon: Users,
+      description: "Send to multiple recipients",
     },
     {
       title: "Delivery Logs",
@@ -98,7 +105,9 @@ export function PageSideBar() {
             <SidebarMenu>
               {navigationItems.map((item) => {
                 const Icon = item.icon;
-                const isActive = pathname === item.href;
+                const isActive = item.href === '/'
+                  ? pathname === '/'
+                  : pathname === item.href || (item.href !== '/send' && pathname.startsWith(item.href + '/'));
 
                 return (
                   <SidebarMenuItem key={item.href}>
