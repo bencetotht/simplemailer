@@ -3,6 +3,7 @@ import { Prisma, Status } from "database";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
+import { logServerError } from "@/lib/log";
 import { consumeRateLimitToken } from "@/lib/rate-limit";
 import {
   buildScheduledSendTimes,
@@ -11,7 +12,6 @@ import {
   validateBulkRecipients,
 } from "@/lib/bulk-send";
 import { bulkMailJobSchema } from "@/lib/validators";
-import { publishLogRecords } from "@/lib/send-jobs";
 
 class RouteError extends Error {
   constructor(
@@ -95,8 +95,8 @@ function isIdempotencyConflict(
  *     summary: Queue a paced bulk mail batch
  *     description: >
  *       Validates the payload, stores a bulk batch with per-recipient items,
- *       schedules accepted recipients with DB-backed pacing, and immediately
- *       publishes any items already due for delivery.
+ *       schedules accepted recipients with DB-backed pacing for workers to
+ *       publish when each item becomes due.
  *     tags: [Mail]
  *     requestBody:
  *       required: true
@@ -136,7 +136,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Request body must be valid JSON" },
+      { status: 400 },
+    );
+  }
   const parsed = bulkMailJobSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -146,6 +154,12 @@ export async function POST(request: NextRequest) {
   }
 
   const enqueueKey = request.headers.get("idempotency-key")?.trim() || null;
+  if (enqueueKey && enqueueKey.length > 256) {
+    return NextResponse.json(
+      { success: false, message: "Idempotency-Key must be at most 256 characters" },
+      { status: 400 },
+    );
+  }
   if (enqueueKey) {
     const existingBatch = await findBatchForResponse(enqueueKey);
     if (existingBatch) {
@@ -225,41 +239,30 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const dueLogs: Array<{
-        id: string;
-        accountId: string;
-        templateId: string;
-        recipient: string;
-        values: Prisma.JsonValue;
-        correlationId: string;
-      }> = [];
+      const rejectedItems = rejected.map((item) => ({
+        id: randomUUID(),
+        batchId: batch.id,
+        sequence: item.index,
+        recipient: item.recipient ?? "",
+        values: item.values as Prisma.InputJsonValue,
+        validationError: item.error,
+      }));
 
-      for (const item of rejected) {
-        await tx.bulkSendItem.create({
-          data: {
-            batchId: batch.id,
-            sequence: item.index,
-            recipient: item.recipient ?? "",
-            values: item.values as Prisma.InputJsonValue,
-            validationError: item.error,
-          },
-        });
-      }
-
-      for (const [acceptedIndex, item] of accepted.entries()) {
-        const bulkItem = await tx.bulkSendItem.create({
-          data: {
+      const acceptedRows = accepted.map((item, acceptedIndex) => {
+        const itemId = randomUUID();
+        const logId = randomUUID();
+        const correlationId = randomUUID();
+        return {
+          item: {
+            id: itemId,
             batchId: batch.id,
             sequence: item.index,
             recipient: item.recipient,
             values: item.values as Prisma.InputJsonValue,
+            validationError: null,
           },
-        });
-
-        const correlationId = randomUUID();
-        const scheduledFor = scheduledTimes[acceptedIndex] ?? startAt;
-        const log = await tx.log.create({
-          data: {
+          log: {
+            id: logId,
             accountId: parsed.data.accountId,
             recipient: item.recipient,
             templateId: parsed.data.templateId,
@@ -267,36 +270,18 @@ export async function POST(request: NextRequest) {
             status: Status.ENQUEUE_PENDING,
             correlationId,
             bulkBatchId: batch.id,
-            bulkItemId: bulkItem.id,
-            scheduledFor,
+            bulkItemId: itemId,
+            scheduledFor: scheduledTimes[acceptedIndex] ?? startAt,
           },
-          select: {
-            id: true,
-            accountId: true,
-            templateId: true,
-            recipient: true,
-            values: true,
-            correlationId: true,
-            scheduledFor: true,
-          },
-        });
+        };
+      });
 
-        await tx.bulkSendItem.update({
-          where: { id: bulkItem.id },
-          data: { logId: log.id },
-        });
-
-        if ((log.scheduledFor ?? now).getTime() <= now.getTime()) {
-          dueLogs.push({
-            id: log.id,
-            accountId: log.accountId,
-            templateId: log.templateId,
-            recipient: log.recipient,
-            values: log.values,
-            correlationId: log.correlationId ?? correlationId,
-          });
-        }
-      }
+      await tx.bulkSendItem.createMany({
+        data: [...rejectedItems, ...acceptedRows.map((row) => row.item)],
+      });
+      await tx.log.createMany({
+        data: acceptedRows.map((row) => row.log),
+      });
 
       await tx.account.update({
         where: { id: parsed.data.accountId },
@@ -314,13 +299,8 @@ export async function POST(request: NextRequest) {
           recipient: item.recipient,
           error: item.error,
         })),
-        dueLogs,
       };
     });
-
-    if (created.dueLogs.length > 0) {
-      await publishLogRecords(created.dueLogs);
-    }
 
     return NextResponse.json(
       {
@@ -345,6 +325,11 @@ export async function POST(request: NextRequest) {
         return acceptedResponse(existingBatch);
       }
     }
+
+    logServerError("api.send_bulk.create_failed", error, {
+      accountId: parsed.data.accountId,
+      recipientCount: parsed.data.recipients.length,
+    });
 
     return NextResponse.json(
       { success: false, message: "Failed to create bulk batch" },

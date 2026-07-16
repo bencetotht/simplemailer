@@ -8,14 +8,6 @@ import { consumeRateLimitToken } from "@/lib/rate-limit";
 import { mailJobSchema } from "@/lib/validators";
 import { publishLogRecords } from "@/lib/send-jobs";
 
-const NON_TERMINAL_STATUSES: Status[] = [
-  Status.ENQUEUE_PENDING,
-  Status.QUEUED,
-  Status.PROCESSING,
-  Status.RETRYING,
-  Status.PENDING,
-];
-
 function idempotencyResponse(jobId: string, status: Status): NextResponse {
   return NextResponse.json(
     { success: true, jobId, status },
@@ -49,7 +41,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Request body must be valid JSON" },
+      { status: 400 },
+    );
+  }
   const parsed = mailJobSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -59,9 +59,15 @@ export async function POST(request: NextRequest) {
   }
 
   const enqueueKey = request.headers.get("idempotency-key")?.trim() || null;
+  if (enqueueKey && enqueueKey.length > 256) {
+    return NextResponse.json(
+      { success: false, message: "Idempotency-Key must be at most 256 characters" },
+      { status: 400 },
+    );
+  }
   if (enqueueKey) {
     const existing = await prisma.log.findUnique({ where: { enqueueKey } });
-    if (existing && NON_TERMINAL_STATUSES.includes(existing.status)) {
+    if (existing) {
       return idempotencyResponse(existing.id, existing.status);
     }
   }
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (isIdempotencyConflict(error) && enqueueKey) {
       const existing = await prisma.log.findUnique({ where: { enqueueKey } });
-      if (existing && NON_TERMINAL_STATUSES.includes(existing.status)) {
+      if (existing) {
         return idempotencyResponse(existing.id, existing.status);
       }
     }

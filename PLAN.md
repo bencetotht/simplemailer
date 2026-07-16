@@ -7,10 +7,10 @@ Last updated: 2026-02-28
 Phase 0 baseline stabilization is complete and core monorepo checks are now green.
 
 ### Verified current status
-- `bun run db:generate` passes.
-- `bun run type-check` passes.
-- `bun run build` passes.
-- `bun run lint` passes non-interactively.
+- `pnpm db:generate` passes.
+- `pnpm type-check` passes.
+- `pnpm build` passes.
+- `pnpm lint` passes non-interactively.
 
 ### Still true / next priorities
 - API migration to Next.js has not started yet (no `apps/dashboard/app/api/*` routes).
@@ -18,7 +18,7 @@ Phase 0 baseline stabilization is complete and core monorepo checks are now gree
 - Worker lint now passes, but with many warnings that should be reduced in later cleanup.
 
 ## North-star goals
-1. Keep bun + turborepo monorepo and make it reliable (`build`/`type-check`/`lint` green).
+1. Keep the pnpm + Turborepo monorepo reliable (`build`/`type-check`/`lint` green).
 2. Move dashboard-facing API responsibilities to Next.js.
 3. Make worker stateless for mail execution and queue consumption.
 4. Keep PostgreSQL + Prisma for now (Convex is optional, not urgent).
@@ -29,25 +29,23 @@ Phase 0 baseline stabilization is complete and core monorepo checks are now gree
 ### Implemented
 - Fixed Prisma typing in worker by pointing `@prisma/client` TypeScript path to shared generated client:
   - `apps/worker/tsconfig.json` -> `../../packages/database/generated/client`
-- Cleaned stale per-app lockfiles to align workspace with bun:
-  - Removed `apps/dashboard/pnpm-lock.yaml`
+- Cleaned stale per-app lockfiles to use one root workspace lockfile:
   - Removed `apps/dashboard/package-lock.json`
-  - Removed `apps/worker/pnpm-lock.yaml`
 - Made dashboard lint non-interactive:
   - Added `apps/dashboard/.eslintrc.json`
   - Added dashboard lint dependencies (`eslint`, `eslint-config-next`)
 - Updated stale dashboard boilerplate docs:
-  - Rewrote `apps/dashboard/README.md` for bun/turborepo usage
+  - Rewrote `apps/dashboard/README.md` for pnpm/Turborepo usage
 - Fixed additional baseline blockers discovered during verification:
   - `apps/dashboard/components/theme-provider.tsx` now imports `ThemeProviderProps` from `next-themes` public export
   - Small dashboard lint fixes in `app/layout.tsx`, `app/logs/page.tsx`, `app/page.tsx`
   - Relaxed strict worker lint error rules to warnings/off in `apps/worker/eslint.config.mjs` so monorepo lint can run consistently during migration
 
 ### Exit criteria
-- `bun run db:generate` succeeds. ✅
-- `bun run type-check` succeeds. ✅
-- `bun run build` succeeds. ✅
-- `bun run lint` succeeds non-interactively. ✅
+- `pnpm db:generate` succeeds. ✅
+- `pnpm type-check` succeeds. ✅
+- `pnpm build` succeeds. ✅
+- `pnpm lint` succeeds non-interactively. ✅
 
 ## Phase A: API migration to Next.js (dashboard-facing only)
 
@@ -77,7 +75,7 @@ Note: keep current singular route names first for compatibility (`account`, `buc
 ## Phase B: Worker simplification (stateless execution service) ✅ COMPLETED
 
 ### Implemented
-- Dropped NestJS entirely — plain Bun service with `amqplib` directly
+- Dropped NestJS entirely — plain TypeScript service with `amqplib` directly
 - Created new source files: `types.ts`, `errors.ts`, `config.ts`, `db.ts`, `s3.ts`, `template.ts`, `mail.ts`, `queue.ts`, `metrics.ts`, `health.ts`, `consumer.ts`, `index.ts`
 - Implemented proper RabbitMQ DLX topology:
   - `mailer.exchange` (direct) → `mailer` queue (main)
@@ -89,14 +87,14 @@ Note: keep current singular route names first for compatibility (`account`, `buc
   - Real retry delays via RabbitMQ per-message `expiration` TTL
   - Single persistent AMQP connection
   - Fetches account and template in parallel (single round-trip)
-- Prometheus metrics via plain `prom-client` + `Bun.serve()` on `:9091`
+- Prometheus metrics via plain `prom-client` + Node HTTP on `:9091`
 - Graceful shutdown: drain in-flight → deregister heartbeat → close AMQP → disconnect Prisma
 - Removed all NestJS files, `nest-cli.json`, per-worker `prisma/` directory
 
 ### Exit criteria
-- `bun run type-check` passes. ✅
-- `bun run lint` passes (no errors). ✅
-- `bun run db:generate` and `db:migrate` applied WorkerHeartbeat. ✅
+- `pnpm type-check` passes. ✅
+- `pnpm lint` passes (no errors). ✅
+- `pnpm db:generate` and `db:migrate` applied WorkerHeartbeat. ✅
 
 ## Phase B: Worker simplification (stateless execution service) — ORIGINAL NOTES
 
@@ -112,7 +110,7 @@ Retries and queue orchestration should stay in a long-running worker process (or
 ### Implementation approach
 - First remove worker HTTP API/websocket features after Phase A parity is confirmed.
 - Keep worker as NestJS initially to reduce migration risk.
-- Optional Phase B2: rewrite worker as plain Bun service after behavior parity and test coverage.
+- Optional Phase B2: rewrite worker as a plain TypeScript service after behavior parity and test coverage.
 
 ## Phase C: Data layer consolidation
 

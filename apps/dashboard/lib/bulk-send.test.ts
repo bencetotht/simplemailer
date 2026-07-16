@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import { Status } from "database";
 import {
   BULK_DEFAULT_MIN_DELAY_MS,
@@ -9,6 +9,7 @@ import {
   summarizeBulkItems,
   validateBulkRecipients,
 } from "./bulk-send";
+import { bulkMailJobSchema } from "./validators";
 
 describe("bulk-send helpers", () => {
   test("accepts recipients that only use shared values", () => {
@@ -60,6 +61,31 @@ describe("bulk-send helpers", () => {
     expect(result.rejected.map((item) => item.index)).toEqual([0, 1]);
   });
 
+  test("rejects malformed recipient entries without rejecting valid siblings", () => {
+    const result = validateBulkRecipients(
+      [null, { recipient: "alice@example.com" }],
+      { campaign: "launch" },
+    );
+
+    expect(result.rejected).toHaveLength(1);
+    expect(result.rejected[0]?.index).toBe(0);
+    expect(result.accepted).toEqual([{
+      index: 1,
+      recipient: "alice@example.com",
+      values: { campaign: "launch" },
+    }]);
+  });
+
+  test("allows per-recipient validation to report malformed entries", () => {
+    const parsed = bulkMailJobSchema.safeParse({
+      accountId: "account-1",
+      templateId: "template-1",
+      recipients: [null, { recipient: "alice@example.com" }],
+    });
+
+    expect(parsed.success).toBe(true);
+  });
+
   test("clamps pacing delays to the supported range", () => {
     expect(clampBulkMinDelayMs()).toBe(BULK_DEFAULT_MIN_DELAY_MS);
     expect(clampBulkMinDelayMs(250)).toBe(BULK_DEFAULT_MIN_DELAY_MS);
@@ -95,7 +121,6 @@ describe("bulk-send helpers", () => {
         recipient: "bad@example.com",
         values: {},
         validationError: "Invalid recipient",
-        logId: null,
         createdAt: new Date("2026-03-09T10:00:00.000Z"),
         updatedAt: new Date("2026-03-09T10:00:00.000Z"),
         log: null,
@@ -106,7 +131,6 @@ describe("bulk-send helpers", () => {
         recipient: "queued@example.com",
         values: {},
         validationError: null,
-        logId: "log-2",
         createdAt: new Date("2026-03-09T10:00:00.000Z"),
         updatedAt: new Date("2026-03-09T10:00:00.000Z"),
         log: {
@@ -121,7 +145,6 @@ describe("bulk-send helpers", () => {
         recipient: "sent@example.com",
         values: {},
         validationError: null,
-        logId: "log-3",
         createdAt: new Date("2026-03-09T10:00:00.000Z"),
         updatedAt: new Date("2026-03-09T10:00:00.000Z"),
         log: {

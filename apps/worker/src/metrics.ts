@@ -1,4 +1,5 @@
 import { Counter, Gauge, Registry, collectDefaultMetrics } from 'prom-client';
+import { createServer } from 'node:http';
 import { getMetrics } from './db';
 import { getQueueSize } from './queue';
 import type { ConfirmChannel } from 'amqplib';
@@ -170,45 +171,51 @@ export function startMetricsServer(
   readiness: () => boolean,
   healthSnapshot: () => WorkerHealthSnapshot,
 ): { stop: () => void } {
-  const server = Bun.serve({
-    port,
-    fetch: async (req) => {
-      const url = new URL(req.url);
+  const server = createServer(async (request, response) => {
+    const pathname = new URL(request.url ?? '/', 'http://localhost').pathname;
+    const sendJson = (body: unknown, status = 200): void => {
+      response.writeHead(status, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify(body));
+    };
 
-      if (url.pathname === '/metrics') {
-        const data = await metrics.registry.metrics();
-        return new Response(data, {
-          headers: { 'Content-Type': metrics.registry.contentType },
-        });
+    try {
+      if (pathname === '/metrics') {
+        response.writeHead(200, { 'Content-Type': metrics.registry.contentType });
+        response.end(await metrics.registry.metrics());
+        return;
       }
 
-      if (url.pathname === '/autoscale') {
-        return Response.json(metrics.autoscaleSnapshot);
+      if (pathname === '/autoscale') {
+        sendJson(metrics.autoscaleSnapshot);
+        return;
       }
 
-      if (url.pathname === '/healthz') {
+      if (pathname === '/healthz') {
         const health = healthSnapshot();
-        return Response.json(
-          {
-            status: health.healthy ? 'ok' : 'unhealthy',
-            ...health,
-          },
-          { status: health.healthy ? 200 : 503 },
+        sendJson(
+          { status: health.healthy ? 'ok' : 'unhealthy', ...health },
+          health.healthy ? 200 : 503,
         );
+        return;
       }
 
-      if (url.pathname === '/readyz') {
-        return Response.json(
-          { ready: readiness() },
-          { status: readiness() ? 200 : 503 },
-        );
+      if (pathname === '/readyz') {
+        const ready = readiness();
+        sendJson({ ready }, ready ? 200 : 503);
+        return;
       }
 
-      return new Response('Not Found', { status: 404 });
-    },
+      response.writeHead(404, { 'Content-Type': 'text/plain' });
+      response.end('Not Found');
+    } catch (error) {
+      console.error('[metrics] Request failed:', error);
+      if (!response.headersSent) response.writeHead(500, { 'Content-Type': 'text/plain' });
+      response.end('Internal Server Error');
+    }
   });
+  server.listen(port);
   console.log(`[metrics] Metrics endpoint at http://localhost:${port}/metrics`);
-  return { stop: () => server.stop() };
+  return { stop: () => server.close() };
 }
 
 export function startMetricsUpdater(

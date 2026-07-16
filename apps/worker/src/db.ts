@@ -150,62 +150,69 @@ export async function validateTemplate(templateId: string): Promise<void> {
   if (!template) throw new ValueError(`Template ${templateId} not found`);
 }
 
-export async function fetchDueEnqueuePending(limit = 50, olderThanMs = 10_000): Promise<Log[]> {
+export async function claimDueEnqueuePending(limit = 50, olderThanMs = 10_000): Promise<Log[]> {
   const now = new Date();
   const threshold = new Date(Date.now() - olderThanMs);
-  const [scheduledLogs, staleLogs] = await Promise.all([
-    prisma.log.findMany({
-      where: {
-        status: Status.ENQUEUE_PENDING,
-        scheduledFor: { not: null, lte: now },
-      },
-      orderBy: [
-        { scheduledFor: 'asc' },
-        { createdAt: 'asc' },
-      ],
-      take: limit,
-    }),
-    prisma.log.findMany({
-      where: {
-        status: Status.ENQUEUE_PENDING,
-        scheduledFor: null,
-        updatedAt: { lte: threshold },
-      },
-      orderBy: { createdAt: 'asc' },
-      take: limit,
-    }),
-  ]);
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Log[]>`
+      SELECT *
+      FROM "public"."Log"
+      WHERE "status" = 'ENQUEUE_PENDING'::"public"."Status"
+        AND (
+          ("scheduledFor" IS NOT NULL AND "scheduledFor" <= ${now})
+          OR ("scheduledFor" IS NULL AND "updatedAt" <= ${threshold})
+        )
+      ORDER BY COALESCE("scheduledFor", "createdAt") ASC, "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    `;
 
-  return [...scheduledLogs, ...staleLogs]
-    .sort((left, right) => {
-      const leftTime = left.scheduledFor?.getTime() ?? left.createdAt.getTime();
-      const rightTime = right.scheduledFor?.getTime() ?? right.createdAt.getTime();
-      if (leftTime !== rightTime) return leftTime - rightTime;
-      return left.createdAt.getTime() - right.createdAt.getTime();
-    })
-    .slice(0, limit);
-}
-
-export async function fetchStaleEnqueuePending(limit = 100, olderThanMs = 10_000): Promise<Log[]> {
-  const threshold = new Date(Date.now() - olderThanMs);
-  return prisma.log.findMany({
-    where: {
-      status: Status.ENQUEUE_PENDING,
-      updatedAt: { lte: threshold },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
+    if (rows.length === 0) return [];
+    await tx.log.updateMany({
+      where: { id: { in: rows.map((row) => row.id) }, status: Status.ENQUEUE_PENDING },
+      data: { status: Status.PENDING },
+    });
+    return rows.map((row) => ({ ...row, status: Status.PENDING }));
   });
 }
 
+export async function releaseStaleEnqueueClaims(olderThanMs = 60_000): Promise<number> {
+  const threshold = new Date(Date.now() - olderThanMs);
+  const result = await prisma.log.updateMany({
+    where: {
+      status: Status.PENDING,
+      updatedAt: { lte: threshold },
+    },
+    data: { status: Status.ENQUEUE_PENDING },
+  });
+  return result.count;
+}
+
 export async function markQueuedAfterPublish(logId: string): Promise<void> {
-  await prisma.log.update({
-    where: { id: logId },
+  await prisma.log.updateMany({
+    where: {
+      id: logId,
+      status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] },
+    },
     data: {
       status: Status.QUEUED,
       lastAttemptAt: new Date(),
       failureClass: null,
       lastError: null,
+    },
+  });
+}
+
+export async function releaseEnqueueClaim(
+  logId: string,
+  error: unknown,
+): Promise<void> {
+  await prisma.log.updateMany({
+    where: { id: logId, status: Status.PENDING },
+    data: {
+      status: Status.ENQUEUE_PENDING,
+      lastError: error instanceof Error ? error.message : String(error),
+      failureClass: 'RECONCILE_PUBLISH_FAILED',
     },
   });
 }

@@ -839,7 +839,7 @@
     "/api/send/bulk": {
       "post": {
         "summary": "Queue a paced bulk mail batch",
-        "description": "Validates the payload, stores the batch and its recipients, applies DB-backed pacing per account, and immediately publishes any recipients that are already due.",
+        "description": "Validates the payload, stores the batch and its recipients, and applies DB-backed pacing per account so workers publish each recipient when due.",
         "tags": [
           "Mail"
         ],

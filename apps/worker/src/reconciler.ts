@@ -1,7 +1,11 @@
 import { randomUUID } from 'crypto';
 import type { ConfirmChannel } from 'amqplib';
-import { Status } from 'database';
-import { fetchDueEnqueuePending, markQueuedAfterPublish, updateLogStatus } from './db';
+import {
+  claimDueEnqueuePending,
+  markQueuedAfterPublish,
+  releaseEnqueueClaim,
+  releaseStaleEnqueueClaims,
+} from './db';
 import { publishMain } from './queue';
 import type { MailJob, QueueMessageV2, WorkerConfig } from './types';
 
@@ -31,13 +35,9 @@ export function startEnqueueReconciler(
     if (!channel) return;
 
     try {
-      const now = new Date();
-      const dueLogs = await fetchDueEnqueuePending(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
+      await releaseStaleEnqueueClaims();
+      const dueLogs = await claimDueEnqueuePending(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
       for (const log of dueLogs) {
-        if (!isReadyForEnqueue(log, now, 10_000)) {
-          continue;
-        }
-
         const data: MailJob = {
           accountId: log.accountId,
           templateId: log.templateId,
@@ -59,10 +59,7 @@ export function startEnqueueReconciler(
           });
           await markQueuedAfterPublish(log.id);
         } catch (error) {
-          await updateLogStatus(log.id, Status.ENQUEUE_PENDING, {
-            lastError: error instanceof Error ? error.message : String(error),
-            failureClass: 'RECONCILE_PUBLISH_FAILED',
-          });
+          await releaseEnqueueClaim(log.id, error);
         }
       }
     } catch (error) {

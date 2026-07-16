@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { describe, expect, test } from "vitest";
 import spec from "./openapi.json";
 
 describe("OpenAPI bulk send coverage", () => {

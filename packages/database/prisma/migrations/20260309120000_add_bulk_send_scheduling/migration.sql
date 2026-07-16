@@ -31,7 +31,6 @@ CREATE TABLE IF NOT EXISTS "public"."BulkSendItem" (
   "recipient" TEXT NOT NULL,
   "values" JSONB NOT NULL DEFAULT '{}',
   "validationError" TEXT,
-  "logId" TEXT,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updatedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
   CONSTRAINT "BulkSendItem_pkey" PRIMARY KEY ("id")
@@ -41,7 +40,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS "BulkSendBatch_enqueueKey_key" ON "public"."Bu
 CREATE UNIQUE INDEX IF NOT EXISTS "Log_bulkItemId_key" ON "public"."Log"("bulkItemId");
 CREATE INDEX IF NOT EXISTS "BulkSendBatch_createdAt_idx" ON "public"."BulkSendBatch"("createdAt");
 CREATE INDEX IF NOT EXISTS "BulkSendBatch_accountId_createdAt_idx" ON "public"."BulkSendBatch"("accountId", "createdAt");
-CREATE INDEX IF NOT EXISTS "BulkSendItem_batchId_sequence_idx" ON "public"."BulkSendItem"("batchId", "sequence");
+CREATE UNIQUE INDEX IF NOT EXISTS "BulkSendItem_batchId_sequence_key" ON "public"."BulkSendItem"("batchId", "sequence");
 CREATE INDEX IF NOT EXISTS "BulkSendItem_batchId_validationError_idx" ON "public"."BulkSendItem"("batchId", "validationError");
 CREATE INDEX IF NOT EXISTS "Log_status_scheduledFor_createdAt_idx" ON "public"."Log"("status", "scheduledFor", "createdAt");
 CREATE INDEX IF NOT EXISTS "Log_bulkBatchId_idx" ON "public"."Log"("bulkBatchId");

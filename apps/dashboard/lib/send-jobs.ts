@@ -43,8 +43,11 @@ export async function publishLogRecords(logs: EnqueueableMailLog[]): Promise<Pub
         },
       });
 
-      await prisma.log.update({
-        where: { id: log.id },
+      await prisma.log.updateMany({
+        where: {
+          id: log.id,
+          status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] },
+        },
         data: {
           status: Status.QUEUED,
           lastAttemptAt: new Date(),
@@ -56,8 +59,11 @@ export async function publishLogRecords(logs: EnqueueableMailLog[]): Promise<Pub
       queuedIds.push(log.id);
     } catch (error) {
       logServerError("send_jobs.publish_failed", error, { jobId: log.id });
-      await prisma.log.update({
-        where: { id: log.id },
+      await prisma.log.updateMany({
+        where: {
+          id: log.id,
+          status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] },
+        },
         data: {
           lastError: error instanceof Error ? error.message : String(error),
           failureClass: "PUBLISH_CONFIRM_FAILED",

@@ -102,6 +102,22 @@ function kvRowsToObject(rows: KVRow[]): Record<string, unknown> {
   return out;
 }
 
+function isBulkRecipient(value: unknown): value is BulkRecipient {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.recipient !== 'string') return false;
+  return entry.values === undefined || (
+    entry.values !== null &&
+    typeof entry.values === 'object' &&
+    !Array.isArray(entry.values)
+  );
+}
+
+function escapeCsvCell(value: string): string {
+  const safeValue = /^[=+\-@]/.test(value) ? `'${value}` : value;
+  return `"${safeValue.replace(/"/g, '""')}"`;
+}
+
 function statusBadgeVariant(status: string): 'default' | 'secondary' | 'destructive' | 'outline' {
   switch (status) {
     case 'SENT': return 'default';
@@ -121,7 +137,7 @@ function formatMs(ms: number): string {
 }
 
 function estimatedCompletion(count: number, delayMs: number): string {
-  const totalMs = count * delayMs;
+  const totalMs = Math.max(count - 1, 0) * delayMs;
   if (totalMs < 60_000) return `~${Math.ceil(totalMs / 1000)} seconds`;
   if (totalMs < 3_600_000) return `~${Math.ceil(totalMs / 60_000)} minutes`;
   return `~${(totalMs / 3_600_000).toFixed(1)} hours`;
@@ -143,7 +159,6 @@ export default function BulkSendPage() {
   const [sharedKvRows, setSharedKvRows] = useState<KVRow[]>([{ key: '', value: '' }]);
   const [sharedJsonMode, setSharedJsonMode] = useState(false);
   const [sharedJsonRaw, setSharedJsonRaw] = useState('{}');
-  const [sharedJsonError, setSharedJsonError] = useState('');
   const [delaySeconds, setDelaySeconds] = useState(5);
   const [step1Errors, setStep1Errors] = useState<Record<string, string>>({});
 
@@ -193,7 +208,13 @@ export default function BulkSendPage() {
       try {
         const parsed = JSON.parse(jsonInput);
         if (!Array.isArray(parsed)) { setParseErrors(['Input must be a JSON array']); setParsedRecipients([]); return; }
-        setParsedRecipients(parsed as BulkRecipient[]);
+        const invalidIndex = parsed.findIndex((entry) => !isBulkRecipient(entry));
+        if (invalidIndex !== -1) {
+          setParseErrors([`Recipient at index ${invalidIndex} must contain a string recipient and optional values object`]);
+          setParsedRecipients([]);
+          return;
+        }
+        setParsedRecipients(parsed);
         setParseErrors([]);
       } catch {
         setParseErrors(['Invalid JSON']);
@@ -233,26 +254,27 @@ export default function BulkSendPage() {
     return () => {
       if (pollingRef.current) { clearInterval(pollingRef.current); pollingRef.current = null; }
     };
-  }, [submitResult?.batchId, batchStatus?.completedAt]);
+  }, [submitResult?.batchId, batchStatus?.completedAt, itemsPage]);
 
-  // Re-fetch items on page change
-  useEffect(() => {
-    if (!submitResult?.batchId) return;
-    getBulkBatchStatus(submitResult.batchId, {
-      skip: itemsPage * ITEMS_PAGE_SIZE,
-      take: ITEMS_PAGE_SIZE,
-    }).then((res) => {
-      if (res.success) { setBatchItems(res.items ?? []); setBatchItemsTotal(res.total ?? 0); }
-    }).catch(() => {});
-  }, [itemsPage, submitResult?.batchId]);
-
-  const sharedValues = useMemo((): Record<string, unknown> | null => {
+  const sharedValueResult = useMemo((): {
+    values: Record<string, unknown> | null;
+    error: string;
+  } => {
     if (sharedJsonMode) {
-      try { const v = JSON.parse(sharedJsonRaw); setSharedJsonError(''); return v; }
-      catch { setSharedJsonError('Invalid JSON'); return null; }
+      try {
+        const parsed: unknown = JSON.parse(sharedJsonRaw);
+        if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+          return { values: null, error: 'Shared values must be a JSON object' };
+        }
+        return { values: parsed as Record<string, unknown>, error: '' };
+      } catch {
+        return { values: null, error: 'Invalid JSON' };
+      }
     }
-    return kvRowsToObject(sharedKvRows);
+    return { values: kvRowsToObject(sharedKvRows), error: '' };
   }, [sharedJsonMode, sharedJsonRaw, sharedKvRows]);
+  const sharedValues = sharedValueResult.values;
+  const sharedJsonError = sharedValueResult.error;
 
   const mergedPreview = useMemo(() => {
     const shared = sharedValues ?? {};
@@ -303,7 +325,11 @@ export default function BulkSendPage() {
   const downloadRejectedCsv = () => {
     if (!submitResult?.rejectedItems?.length) return;
     const header = 'index,recipient,error';
-    const rows = submitResult.rejectedItems.map((r) => `${r.index},${r.recipient},"${r.error.replace(/"/g, '""')}"`);
+    const rows = submitResult.rejectedItems.map((r) => [
+      String(r.index),
+      escapeCsvCell(r.recipient ?? ''),
+      escapeCsvCell(r.error),
+    ].join(','));
     const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -319,7 +345,6 @@ export default function BulkSendPage() {
     const next = { ...base };
     for (const v of templateVariables) { if (!(v in next)) next[v] = ''; }
     setSharedJsonRaw(JSON.stringify(next, null, 2));
-    setSharedJsonError('');
   };
 
   const autofillSharedKv = () => {

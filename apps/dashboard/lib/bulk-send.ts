@@ -1,6 +1,6 @@
 import { Status } from "database";
 import { z } from "zod";
-import { bulkMailRecipientSchema } from "@/lib/validators";
+import { bulkMailRecipientSchema } from "./validators";
 
 export const BULK_DEFAULT_MIN_DELAY_MS = 5_000;
 export const BULK_MAX_MIN_DELAY_MS = 600_000;
@@ -31,7 +31,6 @@ export interface BatchItemSummaryInput {
   recipient: string;
   values: unknown;
   validationError: string | null;
-  logId: string | null;
   createdAt: Date;
   updatedAt: Date;
   log: null | {
@@ -167,7 +166,7 @@ export function summarizeBulkItems(items: BatchItemSummaryInput[]): {
       recipient: item.recipient,
       values: item.values,
       validationError: item.validationError,
-      logId: item.logId,
+      logId: item.log?.id ?? null,
       status,
       scheduledFor: item.log?.scheduledFor ?? null,
       createdAt: item.createdAt,

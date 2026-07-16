@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
-import { summarizeBulkItems } from "@/lib/bulk-send";
+import { Prisma, Status } from "database";
+import {
+  BULK_REJECTED_STATUS,
+  isTerminalLogStatus,
+  summarizeBulkItems,
+} from "@/lib/bulk-send";
 
 function parsePaging(searchParams: URLSearchParams): { skip: number; take: number; status?: string } {
   const skipRaw = Number(searchParams.get("skip") ?? 0);
@@ -59,6 +64,13 @@ export async function GET(
 
   const { id } = await context.params;
   const paging = parsePaging(request.nextUrl.searchParams);
+  const validStatuses = new Set<string>([...Object.values(Status), BULK_REJECTED_STATUS]);
+  if (paging.status && !validStatuses.has(paging.status)) {
+    return NextResponse.json(
+      { success: false, message: "Invalid status filter" },
+      { status: 400 },
+    );
+  }
 
   const batch = await prisma.bulkSendBatch.findUnique({
     where: { id },
@@ -74,28 +86,6 @@ export async function GET(
       completedAt: true,
       createdAt: true,
       updatedAt: true,
-      items: {
-        orderBy: { sequence: "asc" },
-        select: {
-          id: true,
-          sequence: true,
-          recipient: true,
-          values: true,
-          validationError: true,
-          logId: true,
-          createdAt: true,
-          updatedAt: true,
-          log: {
-            select: {
-              id: true,
-              status: true,
-              scheduledFor: true,
-              createdAt: true,
-              updatedAt: true,
-            },
-          },
-        },
-      },
     },
   });
 
@@ -106,25 +96,57 @@ export async function GET(
     );
   }
 
-  const {
-    countsByStatus,
-    terminalAcceptedCount,
-    items: normalizedItems,
-  } = summarizeBulkItems(batch.items);
+  const statusFilter = paging.status;
+  const itemWhere: Prisma.BulkSendItemWhereInput = statusFilter === BULK_REJECTED_STATUS
+    ? { batchId: batch.id, validationError: { not: null } }
+    : statusFilter
+      ? { batchId: batch.id, validationError: null, log: { is: { status: statusFilter as Status } } }
+      : { batchId: batch.id };
+
+  const [statusGroups, items, total] = await Promise.all([
+    prisma.log.groupBy({
+      by: ["status"],
+      where: { bulkBatchId: batch.id },
+      _count: { _all: true },
+    }),
+    prisma.bulkSendItem.findMany({
+      where: itemWhere,
+      orderBy: { sequence: "asc" },
+      skip: paging.skip,
+      take: paging.take,
+      select: {
+        id: true,
+        sequence: true,
+        recipient: true,
+        values: true,
+        validationError: true,
+        createdAt: true,
+        updatedAt: true,
+        log: {
+          select: { id: true, status: true, scheduledFor: true },
+        },
+      },
+    }),
+    prisma.bulkSendItem.count({ where: itemWhere }),
+  ]);
+
+  const countsByStatus: Record<string, number> = {};
+  let terminalAcceptedCount = 0;
+  for (const group of statusGroups) {
+    countsByStatus[group.status] = group._count._all;
+    if (isTerminalLogStatus(group.status)) terminalAcceptedCount += group._count._all;
+  }
+  if (batch.rejectedCount > 0) countsByStatus[BULK_REJECTED_STATUS] = batch.rejectedCount;
+  const normalizedItems = summarizeBulkItems(items).items;
 
   if (!batch.completedAt && batch.acceptedCount > 0 && terminalAcceptedCount === batch.acceptedCount) {
-    const completedBatch = await prisma.bulkSendBatch.update({
-      where: { id: batch.id },
-      data: { completedAt: new Date() },
-      select: { completedAt: true },
+    const completedAt = new Date();
+    await prisma.bulkSendBatch.updateMany({
+      where: { id: batch.id, completedAt: null },
+      data: { completedAt },
     });
-    batch.completedAt = completedBatch.completedAt;
+    batch.completedAt = completedAt;
   }
-
-  const filteredItems = paging.status
-    ? normalizedItems.filter((item) => item.status === paging.status)
-    : normalizedItems;
-  const paginatedItems = filteredItems.slice(paging.skip, paging.skip + paging.take);
 
   return NextResponse.json({
     success: true,
@@ -142,8 +164,8 @@ export async function GET(
       updatedAt: batch.updatedAt,
       countsByStatus,
     },
-    items: paginatedItems,
-    total: filteredItems.length,
+    items: normalizedItems,
+    total,
     skip: paging.skip,
     take: paging.take,
   });

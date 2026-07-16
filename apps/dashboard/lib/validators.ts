@@ -20,7 +20,7 @@ export const bulkMailJobSchema = z.object({
   accountId: z.string().min(1),
   templateId: z.string().min(1),
   sharedValues: z.record(z.unknown()).optional().default({}),
-  recipients: z.array(bulkMailRecipientSchema).min(1).max(1000),
+  recipients: z.array(z.unknown()).min(1).max(1000),
   options: bulkMailOptionsSchema,
 });
 

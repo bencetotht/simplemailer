@@ -118,12 +118,11 @@ model BulkSendItem {
   recipient       String
   values          Json     @default("{}")
   validationError String?
-  logId           String?
   log             Log?     @relation("BulkItemLog")
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  @@index([batchId, sequence])
+  @@unique([batchId, sequence])
   @@index([batchId, validationError])
 }
 

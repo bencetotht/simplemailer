@@ -1,6 +1,7 @@
 **
 !package.json
-!bun.lock
+!pnpm-lock.yaml
+!pnpm-workspace.yaml
 !apps
 !apps/worker
 !apps/worker/package.json

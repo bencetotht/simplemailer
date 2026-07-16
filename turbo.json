@@ -23,6 +23,9 @@
     "type-check": {
       "dependsOn": ["^db:generate"]
     },
+    "test": {
+      "dependsOn": ["^db:generate"]
+    },
     "db:generate": { "cache": false },
     "db:migrate": { "cache": false },
     "clean": { "cache": false }
