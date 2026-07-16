@@ -7,7 +7,13 @@ import { decryptSecret } from './secrets';
 
 export async function createLog(
   data: MailJob,
-  opts?: { enqueueKey?: string | null; correlationId?: string | null },
+  opts?: {
+    enqueueKey?: string | null;
+    correlationId?: string | null;
+    bulkBatchId?: string | null;
+    bulkItemId?: string | null;
+    scheduledFor?: Date | null;
+  },
 ): Promise<Log> {
   return prisma.log.create({
     data: {
@@ -18,6 +24,9 @@ export async function createLog(
       status: Status.PENDING,
       enqueueKey: opts?.enqueueKey ?? null,
       correlationId: opts?.correlationId ?? null,
+      bulkBatchId: opts?.bulkBatchId ?? null,
+      bulkItemId: opts?.bulkItemId ?? null,
+      scheduledFor: opts?.scheduledFor ?? null,
     },
   });
 }
@@ -34,7 +43,7 @@ export async function updateLogStatus(
   },
 ): Promise<Log> {
   const isTerminal = status === Status.SENT || status === Status.FAILED || status === Status.DEAD;
-  return prisma.log.update({
+  const updatedLog = await prisma.log.update({
     where: { id },
     data: {
       status,
@@ -46,6 +55,26 @@ export async function updateLogStatus(
       ...(isTerminal && { completedAt: new Date() }),
     },
   });
+
+  if (isTerminal && updatedLog.bulkBatchId) {
+    const remaining = await prisma.log.count({
+      where: {
+        bulkBatchId: updatedLog.bulkBatchId,
+        status: {
+          in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.PROCESSING, Status.RETRYING, Status.PENDING],
+        },
+      },
+    });
+
+    if (remaining === 0) {
+      await prisma.bulkSendBatch.update({
+        where: { id: updatedLog.bulkBatchId },
+        data: { completedAt: new Date() },
+      });
+    }
+  }
+
+  return updatedLog;
 }
 
 export async function claimLogForProcessing(id: string): Promise<boolean> {
@@ -121,26 +150,69 @@ export async function validateTemplate(templateId: string): Promise<void> {
   if (!template) throw new ValueError(`Template ${templateId} not found`);
 }
 
-export async function fetchStaleEnqueuePending(limit = 100, olderThanMs = 10_000): Promise<Log[]> {
+export async function claimDueEnqueuePending(limit = 50, olderThanMs = 10_000): Promise<Log[]> {
+  const now = new Date();
   const threshold = new Date(Date.now() - olderThanMs);
-  return prisma.log.findMany({
-    where: {
-      status: Status.ENQUEUE_PENDING,
-      updatedAt: { lte: threshold },
-    },
-    orderBy: { createdAt: 'asc' },
-    take: limit,
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Log[]>`
+      SELECT *
+      FROM "public"."Log"
+      WHERE "status" = 'ENQUEUE_PENDING'::"public"."Status"
+        AND (
+          ("scheduledFor" IS NOT NULL AND "scheduledFor" <= ${now})
+          OR ("scheduledFor" IS NULL AND "updatedAt" <= ${threshold})
+        )
+      ORDER BY COALESCE("scheduledFor", "createdAt") ASC, "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    `;
+
+    if (rows.length === 0) return [];
+    await tx.log.updateMany({
+      where: { id: { in: rows.map((row) => row.id) }, status: Status.ENQUEUE_PENDING },
+      data: { status: Status.PENDING },
+    });
+    return rows.map((row) => ({ ...row, status: Status.PENDING }));
   });
 }
 
+export async function releaseStaleEnqueueClaims(olderThanMs = 60_000): Promise<number> {
+  const threshold = new Date(Date.now() - olderThanMs);
+  const result = await prisma.log.updateMany({
+    where: {
+      status: Status.PENDING,
+      updatedAt: { lte: threshold },
+    },
+    data: { status: Status.ENQUEUE_PENDING },
+  });
+  return result.count;
+}
+
 export async function markQueuedAfterPublish(logId: string): Promise<void> {
-  await prisma.log.update({
-    where: { id: logId },
+  await prisma.log.updateMany({
+    where: {
+      id: logId,
+      status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] },
+    },
     data: {
       status: Status.QUEUED,
       lastAttemptAt: new Date(),
       failureClass: null,
       lastError: null,
+    },
+  });
+}
+
+export async function releaseEnqueueClaim(
+  logId: string,
+  error: unknown,
+): Promise<void> {
+  await prisma.log.updateMany({
+    where: { id: logId, status: Status.PENDING },
+    data: {
+      status: Status.ENQUEUE_PENDING,
+      lastError: error instanceof Error ? error.message : String(error),
+      failureClass: 'RECONCILE_PUBLISH_FAILED',
     },
   });
 }

@@ -6,15 +6,7 @@ import { requireApiKey } from "@/lib/auth";
 import { logServerError } from "@/lib/log";
 import { consumeRateLimitToken } from "@/lib/rate-limit";
 import { mailJobSchema } from "@/lib/validators";
-import { publishToMailerQueue } from "@/lib/queue";
-
-const NON_TERMINAL_STATUSES: Status[] = [
-  Status.ENQUEUE_PENDING,
-  Status.QUEUED,
-  Status.PROCESSING,
-  Status.RETRYING,
-  Status.PENDING,
-];
+import { publishLogRecords } from "@/lib/send-jobs";
 
 function idempotencyResponse(jobId: string, status: Status): NextResponse {
   return NextResponse.json(
@@ -49,7 +41,15 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const body = await request.json();
+  let body: unknown;
+  try {
+    body = await request.json();
+  } catch {
+    return NextResponse.json(
+      { success: false, message: "Request body must be valid JSON" },
+      { status: 400 },
+    );
+  }
   const parsed = mailJobSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
@@ -59,9 +59,15 @@ export async function POST(request: NextRequest) {
   }
 
   const enqueueKey = request.headers.get("idempotency-key")?.trim() || null;
+  if (enqueueKey && enqueueKey.length > 256) {
+    return NextResponse.json(
+      { success: false, message: "Idempotency-Key must be at most 256 characters" },
+      { status: 400 },
+    );
+  }
   if (enqueueKey) {
     const existing = await prisma.log.findUnique({ where: { enqueueKey } });
-    if (existing && NON_TERMINAL_STATUSES.includes(existing.status)) {
+    if (existing) {
       return idempotencyResponse(existing.id, existing.status);
     }
   }
@@ -83,7 +89,7 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     if (isIdempotencyConflict(error) && enqueueKey) {
       const existing = await prisma.log.findUnique({ where: { enqueueKey } });
-      if (existing && NON_TERMINAL_STATUSES.includes(existing.status)) {
+      if (existing) {
         return idempotencyResponse(existing.id, existing.status);
       }
     }
@@ -94,22 +100,23 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    await publishToMailerQueue({
-      jobId: log.id,
-      attempt: 0,
+    const publishResult = await publishLogRecords([{
+      id: log.id,
+      accountId: parsed.data.accountId,
+      templateId: parsed.data.templateId,
+      recipient: parsed.data.recipient,
+      values: parsed.data.values as Prisma.JsonValue,
       correlationId,
-      data: parsed.data,
-    });
+    }]);
 
-    log = await prisma.log.update({
-      where: { id: log.id },
-      data: {
-        status: Status.QUEUED,
-        lastAttemptAt: new Date(),
-        lastError: null,
-        failureClass: null,
-      },
-    });
+    if (publishResult.failedIds.length > 0) {
+      return NextResponse.json(
+        { success: false, message: "Failed to enqueue mail job" },
+        { status: 503 },
+      );
+    }
+
+    log = await prisma.log.findUniqueOrThrow({ where: { id: log.id } });
 
     return NextResponse.json(
       { success: true, jobId: log.id, status: log.status },
@@ -117,13 +124,6 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     logServerError("api.send.publish_failed", error, { jobId: log.id });
-    await prisma.log.update({
-      where: { id: log.id },
-      data: {
-        lastError: error instanceof Error ? error.message : String(error),
-        failureClass: "PUBLISH_CONFIRM_FAILED",
-      },
-    });
     return NextResponse.json(
       { success: false, message: "Failed to enqueue mail job" },
       { status: 503 },

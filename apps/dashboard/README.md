@@ -7,21 +7,21 @@ Admin UI for SimpleMailer, running on port `3001`.
 From the monorepo root:
 
 ```bash
-bun run dev
+pnpm dev
 ```
 
 Run only dashboard:
 
 ```bash
-bun --cwd apps/dashboard run dev
+pnpm --dir apps/dashboard dev
 ```
 
 ## Scripts
 
 ```bash
-bun --cwd apps/dashboard run build
-bun --cwd apps/dashboard run lint
-bun --cwd apps/dashboard run type-check
+pnpm --dir apps/dashboard build
+pnpm --dir apps/dashboard lint
+pnpm --dir apps/dashboard type-check
 ```
 
 ## Notes

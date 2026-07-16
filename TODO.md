@@ -1,1 +1,3 @@
-- [ ] restructure(repo): monorepo & turborepo
+- [x] restructure(repo): monorepo & turborepo
+- [ ] feat: bulk send
+- [ ] feat: deployment helm chart

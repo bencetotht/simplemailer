@@ -325,6 +325,113 @@ export const deleteTemplate = async (id: string): Promise<{ success: boolean }> 
   return { success: payload.success === true && res.ok };
 };
 
+// --- Bulk Send ---
+
+export interface BulkRecipient {
+  recipient: string;
+  values?: Record<string, unknown>;
+}
+
+export interface BulkMailJobRequest {
+  accountId: string;
+  templateId: string;
+  sharedValues?: Record<string, unknown>;
+  recipients: BulkRecipient[];
+  options?: { minDelayMs?: number };
+}
+
+export interface BulkSendResponse {
+  success: boolean;
+  batchId?: string;
+  requestedCount?: number;
+  acceptedCount?: number;
+  rejectedCount?: number;
+  effectiveMinDelayMs?: number;
+  rejectedItems?: { index: number; recipient: string; error: string }[];
+  message?: string;
+}
+
+export interface BulkBatchItem {
+  id: string;
+  sequence: number;
+  recipient: string;
+  values: unknown;
+  validationError: string | null;
+  logId: string | null;
+  status: string;
+  scheduledFor: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface BulkBatch {
+  id: string;
+  accountId: string;
+  templateId: string;
+  requestedCount: number;
+  acceptedCount: number;
+  rejectedCount: number;
+  requestedMinDelayMs: number | null;
+  effectiveMinDelayMs: number;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  countsByStatus: Record<string, number>;
+}
+
+export interface BulkBatchStatusResponse {
+  success: boolean;
+  batch?: BulkBatch;
+  items?: BulkBatchItem[];
+  total?: number;
+  skip?: number;
+  take?: number;
+  message?: string;
+}
+
+export const sendBulkMail = async (data: BulkMailJobRequest): Promise<BulkSendResponse> => {
+  const res = await fetchApi('/send/bulk', {
+    method: 'POST',
+    headers: defaultJsonHeaders,
+    body: JSON.stringify(data),
+  });
+  const payload = asObject(await readJson(res));
+  return {
+    success: payload.success === true && res.ok,
+    batchId: typeof payload.batchId === 'string' ? payload.batchId : undefined,
+    requestedCount: typeof payload.requestedCount === 'number' ? payload.requestedCount : undefined,
+    acceptedCount: typeof payload.acceptedCount === 'number' ? payload.acceptedCount : undefined,
+    rejectedCount: typeof payload.rejectedCount === 'number' ? payload.rejectedCount : undefined,
+    effectiveMinDelayMs: typeof payload.effectiveMinDelayMs === 'number' ? payload.effectiveMinDelayMs : undefined,
+    rejectedItems: Array.isArray(payload.rejectedItems) ? payload.rejectedItems as BulkSendResponse['rejectedItems'] : undefined,
+    message: typeof payload.message === 'string' ? payload.message : undefined,
+  };
+};
+
+export const getBulkBatchStatus = async (
+  id: string,
+  params?: { skip?: number; take?: number; status?: string },
+): Promise<BulkBatchStatusResponse> => {
+  const query = new URLSearchParams();
+  if (params?.skip !== undefined) query.set('skip', String(params.skip));
+  if (params?.take !== undefined) query.set('take', String(params.take));
+  if (params?.status) query.set('status', params.status);
+  const qs = query.toString();
+  const res = await fetchApi(`/send/bulk/${id}${qs ? `?${qs}` : ''}`);
+  const payload = asObject(await readJson(res));
+  if (!res.ok) {
+    return { success: false, message: typeof payload.message === 'string' ? payload.message : 'Failed to fetch batch status' };
+  }
+  return {
+    success: true,
+    batch: payload.batch as BulkBatch,
+    items: Array.isArray(payload.items) ? payload.items as BulkBatchItem[] : [],
+    total: typeof payload.total === 'number' ? payload.total : 0,
+    skip: typeof payload.skip === 'number' ? payload.skip : 0,
+    take: typeof payload.take === 'number' ? payload.take : 50,
+  };
+};
+
 // --- Send Mail ---
 
 export interface MailJobRequest {
