@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import type { ConfirmChannel, ConsumeMessage } from 'amqplib';
 import { Status } from 'database';
-import type * as Minio from 'minio';
+import type { S3Client } from '@aws-sdk/client-s3';
 import { CircuitBreaker } from './circuit-breaker';
 import {
   claimLogForProcessing,
@@ -22,7 +22,7 @@ import type { MailJob, QueueMessage, QueueMessageV2, WorkerConfig } from './type
 
 interface ConsumerDeps {
   config: WorkerConfig;
-  s3Client: Minio.Client | null;
+  s3Client: S3Client | null;
   metrics: Metrics;
   breaker: CircuitBreaker;
 }
@@ -140,7 +140,7 @@ async function handleMessage(
   msg: ConsumeMessage,
   channel: ConfirmChannel,
   config: WorkerConfig,
-  s3Client: Minio.Client | null,
+  s3Client: S3Client | null,
   metrics: Metrics,
   breaker: CircuitBreaker,
 ): Promise<void> {

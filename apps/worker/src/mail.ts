@@ -2,7 +2,7 @@ import type { Account, Template } from 'database';
 import type { MailJob, WorkerConfig } from './types';
 import { PermanentMailError, RetryableMailError, ValueError } from './errors';
 import { compileTemplate } from './template';
-import type * as Minio from 'minio';
+import type { S3Client } from '@aws-sdk/client-s3';
 
 const nodemailer = require('nodemailer').default || require('nodemailer');
 
@@ -57,7 +57,7 @@ export async function sendMail(
   template: Template,
   data: MailJob,
   config: WorkerConfig,
-  s3Client: Minio.Client | null,
+  s3Client: S3Client | null,
 ): Promise<void> {
   const compiled = await compileTemplate(template, data.values, config, s3Client);
   const port = account.emailPort ?? 587;

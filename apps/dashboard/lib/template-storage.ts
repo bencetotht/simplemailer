@@ -1,58 +1,101 @@
-import * as Minio from "minio";
+import {
+  CreateBucketCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadBucketCommand,
+  PutObjectCommand,
+  S3Client,
+  type BucketLocationConstraint,
+  type S3ClientConfig,
+} from "@aws-sdk/client-s3";
 
-let client: Minio.Client | null = null;
+let client: S3Client | null = null;
 
-function getConfig(): { client: Minio.Client; bucket: string } {
-  const endpoint = process.env.S3_ENDPOINT;
-  const accessKey = process.env.S3_ACCESS_KEY;
-  const secretKey = process.env.S3_SECRET_KEY;
-  const bucket = process.env.S3_BUCKET;
-  if (!endpoint || !accessKey || !secretKey || !bucket) {
-    throw new Error("S3_ENDPOINT, S3_ACCESS_KEY, S3_SECRET_KEY, and S3_BUCKET are required");
-  }
-
-  client ??= new Minio.Client({
-    endPoint: endpoint,
-    port: process.env.S3_PORT ? Number(process.env.S3_PORT) : undefined,
-    useSSL: process.env.S3_USE_SSL === "true",
-    accessKey,
-    secretKey,
-  });
-  return { client, bucket };
+function parseBoolean(value: string | undefined, fallback = false): boolean {
+  if (value === undefined) return fallback;
+  return value === "1" || value.toLowerCase() === "true";
 }
 
-async function ensureBucket(client: Minio.Client, bucket: string): Promise<void> {
-  if (!(await client.bucketExists(bucket))) {
-    try {
-      await client.makeBucket(bucket);
-    } catch (error) {
-      if (!(await client.bucketExists(bucket))) throw error;
-    }
+function getConfig(): { client: S3Client; bucket: string; region: string; endpoint?: string } {
+  const bucket = process.env.S3_BUCKET;
+  if (!bucket) throw new Error("S3_BUCKET is required");
+
+  const accessKeyId = process.env.S3_ACCESS_KEY;
+  const secretAccessKey = process.env.S3_SECRET_KEY;
+  if (Boolean(accessKeyId) !== Boolean(secretAccessKey)) {
+    throw new Error("S3_ACCESS_KEY and S3_SECRET_KEY must be configured together");
   }
+
+  const region = process.env.S3_REGION || "us-east-1";
+  const endpoint = process.env.S3_ENDPOINT || undefined;
+  const config: S3ClientConfig = {
+    region,
+    ...(endpoint ? { endpoint } : {}),
+    forcePathStyle: parseBoolean(process.env.S3_FORCE_PATH_STYLE),
+    ...(accessKeyId && secretAccessKey
+      ? {
+          credentials: {
+            accessKeyId,
+            secretAccessKey,
+            ...(process.env.S3_SESSION_TOKEN
+              ? { sessionToken: process.env.S3_SESSION_TOKEN }
+              : {}),
+          },
+        }
+      : {}),
+  };
+
+  client ??= new S3Client(config);
+  return { client, bucket, region, endpoint };
+}
+
+function isMissingBucket(error: unknown): boolean {
+  const candidate = error as { name?: string; $metadata?: { httpStatusCode?: number } };
+  return candidate.name === "NotFound" ||
+    candidate.name === "NoSuchBucket" ||
+    candidate.$metadata?.httpStatusCode === 404;
+}
+
+async function ensureBucket(
+  s3: S3Client,
+  bucket: string,
+  region: string,
+  endpoint?: string,
+): Promise<void> {
+  try {
+    await s3.send(new HeadBucketCommand({ Bucket: bucket }));
+    return;
+  } catch (error) {
+    if (!isMissingBucket(error) || !parseBoolean(process.env.S3_CREATE_BUCKET)) throw error;
+  }
+
+  await s3.send(new CreateBucketCommand({
+    Bucket: bucket,
+    ...(!endpoint && region !== "us-east-1"
+      ? { CreateBucketConfiguration: { LocationConstraint: region as BucketLocationConstraint } }
+      : {}),
+  }));
 }
 
 export async function putTemplate(filename: string, content: string): Promise<void> {
   const config = getConfig();
-  await ensureBucket(config.client, config.bucket);
-  const body = Buffer.from(content, "utf8");
-  await config.client.putObject(
-    config.bucket,
-    filename,
-    body,
-    body.length,
-    { "Content-Type": "application/mjml+xml; charset=utf-8" },
-  );
+  await ensureBucket(config.client, config.bucket, config.region, config.endpoint);
+  await config.client.send(new PutObjectCommand({
+    Bucket: config.bucket,
+    Key: filename,
+    Body: Buffer.from(content, "utf8"),
+    ContentType: "application/mjml+xml; charset=utf-8",
+  }));
 }
 
 export async function getTemplate(filename: string): Promise<string> {
-  const { client, bucket } = getConfig();
-  const stream = await client.getObject(bucket, filename);
-  const chunks: Buffer[] = [];
-  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
-  return Buffer.concat(chunks).toString("utf8");
+  const { client: s3, bucket } = getConfig();
+  const response = await s3.send(new GetObjectCommand({ Bucket: bucket, Key: filename }));
+  if (!response.Body) throw new Error(`Template object ${filename} has no body`);
+  return response.Body.transformToString("utf-8");
 }
 
 export async function deleteTemplate(filename: string): Promise<void> {
-  const { client, bucket } = getConfig();
-  await client.removeObject(bucket, filename);
+  const { client: s3, bucket } = getConfig();
+  await s3.send(new DeleteObjectCommand({ Bucket: bucket, Key: filename }));
 }

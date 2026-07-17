@@ -79,11 +79,13 @@ services:
       - RABBITMQ_API_PASS=${RABBITMQ_PASS:-change-me}
       - DASHBOARD_API_KEY=${DASHBOARD_API_KEY}
       - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}
-      - S3_ENDPOINT=minio
-      - S3_PORT=9000
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
       - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-change-me}
       - S3_BUCKET=templates
+      - S3_FORCE_PATH_STYLE=true
+      - S3_CREATE_BUCKET=true
     depends_on:
       postgres:
         condition: service_healthy
@@ -103,11 +105,12 @@ services:
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/mailer
       - RABBITMQ_URL=amqp://${RABBITMQ_USER:-mailer}:${RABBITMQ_PASS:-change-me}@rabbitmq:5672
-      - S3_ENDPOINT=minio
-      - S3_PORT=9000
+      - S3_ENDPOINT=http://minio:9000
+      - S3_REGION=us-east-1
       - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-change-me}
       - S3_BUCKET=templates
+      - S3_FORCE_PATH_STYLE=true
       - CONFIG_PATH=/app/config.yaml
       - SMTP_TLS_REJECT_UNAUTHORIZED=true
       - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}

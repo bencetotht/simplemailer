@@ -2,7 +2,7 @@ import * as fs from 'fs';
 import type { Template } from 'database';
 import type { WorkerConfig } from './types';
 import { ValueError } from './errors';
-import type * as Minio from 'minio';
+import type { S3Client } from '@aws-sdk/client-s3';
 import { getTemplateFromS3 } from './s3';
 import Handlebars from 'handlebars';
 import * as path from 'path';
@@ -13,7 +13,7 @@ export async function compileTemplate(
   template: Template,
   values: Record<string, unknown>,
   config: WorkerConfig,
-  s3Client: Minio.Client | null,
+  s3Client: S3Client | null,
 ): Promise<{ html: string }> {
   const raw = await loadTemplateSource(template, config, s3Client);
 
@@ -41,7 +41,7 @@ export async function compileTemplate(
 async function loadTemplateSource(
   template: Template,
   config: WorkerConfig,
-  s3Client: Minio.Client | null,
+  s3Client: S3Client | null,
 ): Promise<string> {
   if (template.storageType === 'S3') {
     if (!s3Client || !config.s3Bucket) {
