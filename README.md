@@ -1,54 +1,72 @@
-# simplemailer
+# SimpleMailer
 
-## Todo
-- [ ] Prometheus metric for sent mail / min
-- [ ] Custom subjects
-- [ ] Support for attachments
-- [ ] Support for react-mail
-- [ ] Support for bulk mail sending / newsletters
+SimpleMailer is a central email delivery service for applications using different technology stacks. Applications submit transactional or bulk mail jobs over HTTP; PostgreSQL stores job state, RabbitMQ distributes ready jobs, and independent workers render MJML and deliver through configured SMTP accounts.
 
-## Architecture
-```mermaid
-graph TD
-  subgraph Frontend["Admin Dashboard - Next.js"]
-    A1["User Interface"]
-    A2["API Routes / Server Actions"]
-  end
+The project is under active stabilization. It is suitable for development and evaluation, but the delivery and scheduling reliability work tracked in the repository must be completed before production use.
 
-  subgraph Services
-    B1["PostgreSQL"]
-    B2["S3 - MJML Templates"]
-    B3["RabbitMQ"]
-    B4["Metrics - Prometheus"]
-  end
+## Components
 
-  subgraph Workers["NestJS Mailer Workers (Kubernetes Pods)"]
-    C1["Worker Pod 1"]
-    C2["Worker Pod N"]
-  end
+- `apps/dashboard`: Next.js dashboard and HTTP API
+- `apps/worker`: long-running RabbitMQ consumer and SMTP executor
+- `packages/database`: Prisma schema, client, and migrations
+- PostgreSQL: configuration, bulk schedules, delivery state, and worker heartbeats
+- RabbitMQ: ready jobs, retry delivery, and dead letters
+- S3-compatible storage: intended durable home for MJML templates
 
-  subgraph Cloud["Email Provider (SMTP / SES / SendGrid)"]
-    D1["Email Service"]
-  end
+## Prerequisites
 
-  A1 --> A2
-  A2 -->|Enqueue Job| B3
-  A2 -->|Store Metadata| B1
-  A2 -->|Upload Template| B2
-  A2 -->|Read Metrics| B4
+- Node.js 22
+- pnpm 10.28
+- Docker with Compose for the local infrastructure
 
-  B3 --> C1
-  B3 --> C2
+## Local setup
 
-  C1 -->|Fetch Template| B2
-  C2 -->|Fetch Template| B2
-
-  C1 -->|Send Email| D1
-  C2 -->|Send Email| D1
-
-  C1 -->|Log Result| B1
-  C2 -->|Log Result| B1
-
-  C1 -->|Expose Metrics| B4
-  C2 -->|Expose Metrics| B4
+```bash
+cp .env.example .env
+openssl rand -base64 32
 ```
+
+Put the generated value in `SECRETS_MASTER_KEY`, choose non-default RabbitMQ, MinIO, and API passwords, then start the stack:
+
+```bash
+docker compose up --build
+```
+
+The dashboard is available at `http://localhost:3001`, RabbitMQ management at `http://localhost:15672`, and worker metrics at `http://localhost:9091/metrics`.
+
+For host-based development:
+
+```bash
+pnpm install --frozen-lockfile
+pnpm db:generate
+pnpm db:migrate
+pnpm dev
+```
+
+## Verification
+
+```bash
+pnpm lint
+pnpm type-check
+pnpm test
+pnpm build
+```
+
+CI also applies the complete migration history to a fresh PostgreSQL database.
+
+## API
+
+OpenAPI documentation is served at `/api/docs`. Important endpoints include:
+
+- `POST /api/send` for one message
+- `POST /api/send/bulk` and `GET /api/send/bulk/{id}` for paced batches
+- `/api/account`, `/api/template`, and `/api/bucket` for configuration
+- `/api/logs`, `/api/jobs`, and `/api/workers` for operational state
+
+Protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put this service credential in a `NEXT_PUBLIC_*` environment variable.
+
+## Delivery semantics
+
+RabbitMQ delivery and worker execution are at-least-once. SMTP itself cannot provide exactly-once delivery: a process can fail after the SMTP server accepts a message but before the database records success. The reliability implementation must preserve and expose this uncertainty rather than silently claiming exactly-once behavior.
+
+See `PLAN.md` for the stabilization roadmap and current architectural decisions.
