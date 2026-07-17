@@ -31,6 +31,7 @@ export interface WorkerConfig {
   s3AccessKey?: string;
   s3SecretKey?: string;
   s3Bucket?: string;
+  s3UseSsl: boolean;
   metricsPort: number;
   heartbeatInterval: number;
   heartbeatMaxRetries: number;

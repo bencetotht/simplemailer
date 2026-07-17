@@ -4,6 +4,7 @@ import { requireApiKey } from "@/lib/auth";
 import { templateUpdateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
+import { deleteTemplate, getTemplate, putTemplate } from "@/lib/template-storage";
 
 const TEMPLATES_DIR = path.join(process.cwd(), "../../templates");
 
@@ -17,7 +18,12 @@ export async function DELETE(
   const { id } = await params;
 
   try {
-    await prisma.template.delete({ where: { id } });
+    const template = await prisma.template.delete({ where: { id } });
+    if (template.storageType === "S3") {
+      try { await deleteTemplate(template.filename); } catch { /* orphan cleanup can be retried */ }
+    } else {
+      try { fs.unlinkSync(path.join(TEMPLATES_DIR, template.filename)); } catch { /* already absent */ }
+    }
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json(
@@ -56,7 +62,14 @@ export async function GET(
   }
 
   if (template.storageType === "S3") {
-    return new NextResponse("", { status: 200 });
+    try {
+      return new NextResponse(await getTemplate(template.filename), {
+        status: 200,
+        headers: { "Content-Type": "text/plain; charset=utf-8" },
+      });
+    } catch {
+      return NextResponse.json({ error: "Template object not found" }, { status: 404 });
+    }
   }
 
   try {
@@ -114,6 +127,16 @@ export async function PATCH(
       return NextResponse.json(
         { success: false, message: "Failed to write template file" },
         { status: 500 }
+      );
+    }
+  }
+  if (content !== undefined && template.storageType === "S3") {
+    try {
+      await putTemplate(template.filename, content);
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Failed to upload template" },
+        { status: 503 },
       );
     }
   }

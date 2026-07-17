@@ -52,6 +52,7 @@ export function resolveConfig(): WorkerConfig {
     s3AccessKey: process.env.S3_ACCESS_KEY,
     s3SecretKey: process.env.S3_SECRET_KEY,
     s3Bucket: process.env.S3_BUCKET,
+    s3UseSsl: parseBoolean('S3_USE_SSL', false),
     metricsPort: parseNumber('METRICS_PORT', 9091),
     heartbeatInterval,
     heartbeatMaxRetries,

@@ -10,7 +10,7 @@ export function createS3Client(config: WorkerConfig): Minio.Client | null {
   return new Minio.Client({
     endPoint: s3Endpoint,
     port: s3Port || undefined,
-    useSSL: false,
+    useSSL: config.s3UseSsl,
     accessKey: s3AccessKey,
     secretKey: s3SecretKey,
   });

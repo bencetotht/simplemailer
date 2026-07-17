@@ -79,10 +79,17 @@ services:
       - RABBITMQ_API_PASS=${RABBITMQ_PASS:-change-me}
       - DASHBOARD_API_KEY=${DASHBOARD_API_KEY}
       - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}
+      - S3_ENDPOINT=minio
+      - S3_PORT=9000
+      - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-change-me}
+      - S3_BUCKET=templates
     depends_on:
       postgres:
         condition: service_healthy
       rabbitmq:
+        condition: service_healthy
+      minio:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
@@ -100,6 +107,7 @@ services:
       - S3_PORT=9000
       - S3_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - S3_SECRET_KEY=${MINIO_ROOT_PASSWORD:-change-me}
+      - S3_BUCKET=templates
       - CONFIG_PATH=/app/config.yaml
       - SMTP_TLS_REJECT_UNAUTHORIZED=true
       - SECRETS_MASTER_KEY=${SECRETS_MASTER_KEY}
