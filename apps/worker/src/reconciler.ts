@@ -4,6 +4,7 @@ import {
   claimDueEnqueuePending,
   markQueuedAfterPublish,
   releaseEnqueueClaim,
+  recoverExpiredProcessingLeases,
   releaseStaleEnqueueClaims,
 } from './db';
 import { publishMain } from './queue';
@@ -35,6 +36,12 @@ export function startEnqueueReconciler(
     if (!channel) return;
 
     try {
+      const recovered = await recoverExpiredProcessingLeases();
+      if (recovered.requeued > 0 || recovered.uncertain > 0) {
+        console.warn(
+          `[reconciler] Recovered expired processing leases: requeued=${recovered.requeued} uncertain=${recovered.uncertain}`,
+        );
+      }
       await releaseStaleEnqueueClaims();
       const dueLogs = await claimDueEnqueuePending(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
       for (const log of dueLogs) {

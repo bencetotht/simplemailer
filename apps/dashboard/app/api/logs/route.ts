@@ -26,7 +26,7 @@ import { requireApiKey } from "@/lib/auth";
  *         name: status
  *         schema:
  *           type: string
- *           enum: [ENQUEUE_PENDING, QUEUED, PROCESSING, PENDING, SENT, FAILED, RETRYING, DEAD]
+ *           enum: [ENQUEUE_PENDING, QUEUED, PROCESSING, PENDING, SENT, FAILED, RETRYING, DEAD, DELIVERY_UNCERTAIN]
  *         description: Filter by status
  *       - in: query
  *         name: recipient
@@ -58,7 +58,8 @@ export async function GET(request: NextRequest) {
             | "SENT"
             | "FAILED"
             | "RETRYING"
-            | "DEAD",
+            | "DEAD"
+            | "DELIVERY_UNCERTAIN",
         }
       : {}),
     ...(recipient ? { recipient: { contains: recipient, mode: "insensitive" as const } } : {}),

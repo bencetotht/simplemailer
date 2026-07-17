@@ -7,11 +7,15 @@ import {
   clampBulkMinDelayMs,
   computeInitialScheduleStart,
   summarizeBulkItems,
+  isTerminalLogStatus,
   validateBulkRecipients,
 } from "./bulk-send";
 import { bulkMailJobSchema } from "./validators";
 
 describe("bulk-send helpers", () => {
+  test("treats delivery uncertainty as a terminal operator-review state", () => {
+    expect(isTerminalLogStatus(Status.DELIVERY_UNCERTAIN)).toBe(true);
+  });
   test("accepts recipients that only use shared values", () => {
     const result = validateBulkRecipients(
       [{ recipient: "alice@example.com" }],

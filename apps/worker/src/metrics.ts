@@ -32,6 +32,7 @@ export interface Metrics {
   queueSize: Gauge;
   mailsFailed: Gauge;
   mailsPending: Gauge;
+  deliveryUncertain: Gauge;
   accounts: Gauge;
   templates: Gauge;
   retryBacklog: Gauge;
@@ -97,6 +98,11 @@ export function createMetrics(): Metrics {
     mailsPending: new Gauge({
       name: 'mailer_mails_pending',
       help: 'Total enqueue-pending emails (from DB)',
+      registers: [registry],
+    }),
+    deliveryUncertain: new Gauge({
+      name: 'mailer_delivery_uncertain',
+      help: 'Jobs requiring operator review because a worker was lost during SMTP delivery',
       registers: [registry],
     }),
     accounts: new Gauge({
@@ -243,6 +249,7 @@ export function startMetricsUpdater(
       metrics.templates.set(dbMetrics.templates);
       metrics.mailsFailed.set(dbMetrics.failedMails);
       metrics.mailsPending.set(dbMetrics.pendingMails);
+      metrics.deliveryUncertain.set(dbMetrics.uncertainMails);
       metrics.retryBacklog.set(retrying);
       metrics.workersActive.set(dbMetrics.activeWorkers);
       metrics.autoscalePressure.set(pressure);

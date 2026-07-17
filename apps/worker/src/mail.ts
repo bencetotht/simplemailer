@@ -58,6 +58,7 @@ export async function sendMail(
   data: MailJob,
   config: WorkerConfig,
   s3Client: Minio.Client | null,
+  onDeliveryStart?: () => Promise<void>,
 ): Promise<void> {
   const compiled = await compileTemplate(template, data.values, config, s3Client);
   const port = account.emailPort ?? 587;
@@ -84,6 +85,7 @@ export async function sendMail(
   }
 
   try {
+    await onDeliveryStart?.();
     await transporter.sendMail({
       from: account.username,
       to: data.recipient,
