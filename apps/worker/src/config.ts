@@ -64,6 +64,7 @@ export function resolveConfig(): WorkerConfig {
     reconnectInitialDelayMs: parseNumber('RECONNECT_INITIAL_DELAY_MS', 1000),
     reconnectMaxDelayMs: parseNumber('RECONNECT_MAX_DELAY_MS', 30_000),
     enqueueReconcilerIntervalMs: parseNumber('ENQUEUE_RECONCILER_INTERVAL_MS', 15_000),
+    processingLeaseMs: parseNumber('PROCESSING_LEASE_MS', 120_000),
     smtpRejectUnauthorized: parseBoolean('SMTP_TLS_REJECT_UNAUTHORIZED', true),
     workerId,
     workerVersion: '2.0.0',

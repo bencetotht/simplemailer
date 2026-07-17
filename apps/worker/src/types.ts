@@ -40,6 +40,7 @@ export interface WorkerConfig {
   reconnectInitialDelayMs: number;
   reconnectMaxDelayMs: number;
   enqueueReconcilerIntervalMs: number;
+  processingLeaseMs: number;
   smtpRejectUnauthorized: boolean;
   workerId: string;
   workerVersion: string;

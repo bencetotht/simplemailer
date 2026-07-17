@@ -68,6 +68,7 @@ export interface Stats {
   queued?: number;
   processing?: number;
   dead?: number;
+  deliveryUncertain?: number;
   successRate: number;
 }
 
@@ -86,6 +87,7 @@ export const getStats = async (): Promise<Stats> => {
     queued: typeof payload.queued === 'number' ? payload.queued : undefined,
     processing: typeof payload.processing === 'number' ? payload.processing : undefined,
     dead: typeof payload.dead === 'number' ? payload.dead : undefined,
+    deliveryUncertain: typeof payload.deliveryUncertain === 'number' ? payload.deliveryUncertain : undefined,
     successRate: typeof payload.successRate === 'number' ? payload.successRate : 0,
   };
 };

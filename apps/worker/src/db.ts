@@ -35,6 +35,7 @@ export async function updateLogStatus(
   id: string,
   status: Status,
   opts?: {
+    processingOwner?: string;
     retryCount?: number;
     lastError?: string | null;
     failureClass?: string | null;
@@ -42,9 +43,16 @@ export async function updateLogStatus(
     lastAttemptAt?: Date | null;
   },
 ): Promise<Log> {
-  const isTerminal = status === Status.SENT || status === Status.FAILED || status === Status.DEAD;
-  const updatedLog = await prisma.log.update({
-    where: { id },
+  const isTerminal =
+    status === Status.SENT ||
+    status === Status.FAILED ||
+    status === Status.DEAD ||
+    status === Status.DELIVERY_UNCERTAIN;
+  const result = await prisma.log.updateMany({
+    where: {
+      id,
+      ...(opts?.processingOwner ? { processingOwner: opts.processingOwner } : {}),
+    },
     data: {
       status,
       ...(opts?.retryCount !== undefined && { retryCount: opts.retryCount }),
@@ -53,8 +61,15 @@ export async function updateLogStatus(
       ...(opts?.nextAttemptAt !== undefined && { nextAttemptAt: opts.nextAttemptAt }),
       ...(opts?.lastAttemptAt !== undefined && { lastAttemptAt: opts.lastAttemptAt }),
       ...(isTerminal && { completedAt: new Date() }),
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
     },
   });
+
+  if (result.count === 0) {
+    throw new ValueError(`Processing lease for log ${id} is no longer owned by this worker`);
+  }
+  const updatedLog = await prisma.log.findUniqueOrThrow({ where: { id } });
 
   if (isTerminal && updatedLog.bulkBatchId) {
     const remaining = await prisma.log.count({
@@ -77,18 +92,96 @@ export async function updateLogStatus(
   return updatedLog;
 }
 
-export async function claimLogForProcessing(id: string): Promise<boolean> {
+export async function claimLogForProcessing(
+  id: string,
+  processingOwner: string,
+  leaseMs: number,
+): Promise<boolean> {
+  const now = new Date();
   const result = await prisma.log.updateMany({
     where: {
       id,
-      status: { in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.RETRYING, Status.PENDING] },
+      OR: [
+        { status: { in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.RETRYING, Status.PENDING] } },
+        {
+          status: Status.PROCESSING,
+          processingLeaseExpiresAt: { lte: now },
+          deliveryAttemptStartedAt: null,
+        },
+      ],
     },
     data: {
       status: Status.PROCESSING,
-      lastAttemptAt: new Date(),
+      lastAttemptAt: now,
+      processingOwner,
+      processingLeaseExpiresAt: new Date(now.getTime() + leaseMs),
+      deliveryAttemptStartedAt: null,
     },
   });
   return result.count > 0;
+}
+
+export async function markDeliveryAttemptStarted(
+  id: string,
+  processingOwner: string,
+): Promise<boolean> {
+  const result = await prisma.log.updateMany({
+    where: {
+      id,
+      status: Status.PROCESSING,
+      processingOwner,
+      processingLeaseExpiresAt: { gt: new Date() },
+    },
+    data: { deliveryAttemptStartedAt: new Date() },
+  });
+  return result.count > 0;
+}
+
+export async function markDeliveryAttemptFailed(
+  id: string,
+  processingOwner: string,
+): Promise<void> {
+  await prisma.log.updateMany({
+    where: { id, status: Status.PROCESSING, processingOwner },
+    data: { deliveryAttemptStartedAt: null },
+  });
+}
+
+export async function recoverExpiredProcessingLeases(): Promise<{
+  requeued: number;
+  uncertain: number;
+}> {
+  const now = new Date();
+  const uncertain = await prisma.log.updateMany({
+    where: {
+      status: Status.PROCESSING,
+      processingLeaseExpiresAt: { lte: now },
+      deliveryAttemptStartedAt: { not: null },
+    },
+    data: {
+      status: Status.DELIVERY_UNCERTAIN,
+      completedAt: now,
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
+      failureClass: 'WORKER_LOST_DURING_SMTP_DELIVERY',
+      lastError: 'Worker lease expired after SMTP delivery began; automatic retry suppressed',
+    },
+  });
+  const requeued = await prisma.log.updateMany({
+    where: {
+      status: Status.PROCESSING,
+      processingLeaseExpiresAt: { lte: now },
+      deliveryAttemptStartedAt: null,
+    },
+    data: {
+      status: Status.ENQUEUE_PENDING,
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
+      failureClass: 'PROCESSING_LEASE_EXPIRED',
+      lastError: 'Worker lease expired before SMTP delivery began; job requeued',
+    },
+  });
+  return { requeued: requeued.count, uncertain: uncertain.count };
 }
 
 export async function findLogById(id: string): Promise<Log | null> {
@@ -226,10 +319,11 @@ export async function getMetrics(): Promise<{
   retryingMails: number;
   queuedMails: number;
   processingMails: number;
+  uncertainMails: number;
   activeWorkers: number;
   legacyPlaintextSecrets: number;
 }> {
-  const [accounts, templates, sentMails, failedMails, pendingMails, retryingMails, queuedMails, processingMails, activeWorkers, plaintextAccounts, plaintextBuckets] =
+  const [accounts, templates, sentMails, failedMails, pendingMails, retryingMails, queuedMails, processingMails, uncertainMails, activeWorkers, plaintextAccounts, plaintextBuckets] =
     await Promise.all([
       prisma.account.count(),
       prisma.template.count(),
@@ -239,6 +333,7 @@ export async function getMetrics(): Promise<{
       prisma.log.count({ where: { status: Status.RETRYING } }),
       prisma.log.count({ where: { status: Status.QUEUED } }),
       prisma.log.count({ where: { status: Status.PROCESSING } }),
+      prisma.log.count({ where: { status: Status.DELIVERY_UNCERTAIN } }),
       prisma.workerHeartbeat.count({
         where: { lastHeartbeat: { gte: new Date(Date.now() - 30_000) } },
       }),
@@ -273,6 +368,7 @@ export async function getMetrics(): Promise<{
     retryingMails,
     queuedMails,
     processingMails,
+    uncertainMails,
     activeWorkers,
     legacyPlaintextSecrets: plaintextAccounts + plaintextBuckets,
   };
