@@ -6,7 +6,7 @@ export async function GET(request: NextRequest) {
   const unauthorized = requireApiKey(request);
   if (unauthorized) return unauthorized;
 
-  const [total, sent, failed, pending, retrying, queued, processing, dead] = await Promise.all([
+  const [total, sent, failed, pending, retrying, queued, processing, dead, deliveryUncertain] = await Promise.all([
     prisma.log.count(),
     prisma.log.count({ where: { status: "SENT" } }),
     prisma.log.count({ where: { status: "FAILED" } }),
@@ -15,6 +15,7 @@ export async function GET(request: NextRequest) {
     prisma.log.count({ where: { status: "QUEUED" } }),
     prisma.log.count({ where: { status: "PROCESSING" } }),
     prisma.log.count({ where: { status: "DEAD" } }),
+    prisma.log.count({ where: { status: "DELIVERY_UNCERTAIN" } }),
   ]);
 
   const successRate = total > 0 ? Math.round((sent / total) * 100) : 0;
@@ -28,6 +29,7 @@ export async function GET(request: NextRequest) {
     queued,
     processing,
     dead,
+    deliveryUncertain,
     successRate,
   });
 }

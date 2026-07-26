@@ -136,7 +136,10 @@ export function computeInitialScheduleStart(
 }
 
 export function isTerminalLogStatus(status: Status): boolean {
-  return status === Status.SENT || status === Status.FAILED || status === Status.DEAD;
+  return status === Status.SENT ||
+    status === Status.FAILED ||
+    status === Status.DEAD ||
+    status === Status.DELIVERY_UNCERTAIN;
 }
 
 export function resolveBulkItemStatus(item: BatchItemSummaryInput): BulkItemStatus {

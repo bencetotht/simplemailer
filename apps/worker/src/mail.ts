@@ -84,6 +84,7 @@ export async function sendMail(
   }
 
   try {
+    await onDeliveryStart?.();
     await transporter.sendMail({
       from: account.username,
       to: data.recipient,

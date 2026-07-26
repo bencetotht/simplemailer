@@ -74,6 +74,9 @@ model Log {
   retryCount  Int       @default(0)
   nextAttemptAt DateTime?
   lastAttemptAt DateTime?
+  processingOwner String?
+  processingLeaseExpiresAt DateTime?
+  deliveryAttemptStartedAt DateTime?
   failureClass String?
   lastError   String?
   completedAt DateTime?
@@ -83,6 +86,7 @@ model Log {
   @@index([createdAt])
   @@index([status, createdAt])
   @@index([status, scheduledFor, createdAt])
+  @@index([status, processingLeaseExpiresAt])
   @@index([bulkBatchId])
 }
 
@@ -151,4 +155,5 @@ enum Status {
   FAILED
   RETRYING
   DEAD
+  DELIVERY_UNCERTAIN
 }

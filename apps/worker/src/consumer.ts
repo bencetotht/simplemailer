@@ -9,6 +9,8 @@ import {
   findLogById,
   getCredentials,
   getTemplate,
+  markDeliveryAttemptFailed,
+  markDeliveryAttemptStarted,
   updateLogStatus,
   validateAccount,
   validateTemplate,
@@ -178,19 +180,25 @@ async function handleMessage(
   if (
     logEntry.status === Status.SENT ||
     logEntry.status === Status.FAILED ||
-    logEntry.status === Status.DEAD
+    logEntry.status === Status.DEAD ||
+    logEntry.status === Status.DELIVERY_UNCERTAIN
   ) {
     channel.ack(msg);
     return;
   }
 
-  const claimed = await claimLogForProcessing(logEntry.id);
+  const claimed = await claimLogForProcessing(
+    logEntry.id,
+    config.workerId,
+    config.processingLeaseMs,
+  );
   if (!claimed) {
     channel.ack(msg);
     return;
   }
 
   let breakerKey: string | null = null;
+  let smtpAccepted = false;
   try {
     const [account, template] = await Promise.all([
       getCredentials(data.accountId),
@@ -203,12 +211,19 @@ async function handleMessage(
       throw new CircuitOpenError(attemptState.reason ?? 'circuit-open');
     }
 
-    await sendMail(account, template, data, config, s3Client);
+    await sendMail(account, template, data, config, s3Client, async () => {
+      const deliveryStarted = await markDeliveryAttemptStarted(logEntry.id, config.workerId);
+      if (!deliveryStarted) {
+        throw new RetryableMailError('Processing lease expired before SMTP delivery began');
+      }
+    });
+    smtpAccepted = true;
     breaker.recordSuccess(breakerKey);
     metrics.setOpenCircuits(breaker.getOpenCircuits());
     metrics.processedTotal.inc();
 
     await updateLogStatus(logEntry.id, Status.SENT, {
+      processingOwner: config.workerId,
       lastError: null,
       failureClass: null,
       nextAttemptAt: null,
@@ -217,6 +232,15 @@ async function handleMessage(
     channel.ack(msg);
     return;
   } catch (error) {
+    if (smtpAccepted) {
+      logRedactedError('consumer.smtp_accepted_status_persist_failed', error, {
+        logId: logEntry.id,
+        workerId: config.workerId,
+      });
+      channel.nack(msg, false, true);
+      return;
+    }
+    await markDeliveryAttemptFailed(logEntry.id, config.workerId);
     if (breakerKey && (error instanceof RetryableMailError || error instanceof CircuitOpenError)) {
       breaker.recordRetryableFailure(breakerKey);
     }
@@ -251,6 +275,7 @@ async function handleMessage(
           );
 
           await updateLogStatus(logEntry.id, Status.RETRYING, {
+            processingOwner: config.workerId,
             retryCount: nextAttempt,
             lastError: err.message,
             failureClass: err.name,
@@ -287,6 +312,7 @@ async function handleMessage(
       const terminalStatus =
         err instanceof PermanentMailError || err instanceof ValueError ? Status.FAILED : Status.DEAD;
       await updateLogStatus(logEntry.id, terminalStatus, {
+        processingOwner: config.workerId,
         retryCount: queueMessage.attempt,
         lastError: err.message,
         failureClass: err.name,
