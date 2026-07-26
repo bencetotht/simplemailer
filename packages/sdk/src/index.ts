@@ -3,6 +3,7 @@ export {
   SendersClient,
   SimpleMailer,
   TemplatesClient,
+  WebhooksClient,
   type SimpleMailerOptions,
   type SimpleMailerTransportOptions,
 } from "./client.js";
@@ -39,4 +40,8 @@ export type {
   Template,
   UpsertSender,
   UpsertTemplate,
+  CreateWebhookEndpoint,
+  UpdateWebhookEndpoint,
+  WebhookEndpoint,
+  WebhookEventName,
 } from "@simplemailer/contracts";

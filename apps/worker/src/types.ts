@@ -50,6 +50,11 @@ export interface WorkerConfig {
   reconnectMaxDelayMs: number;
   enqueueReconcilerIntervalMs: number;
   processingLeaseMs: number;
+  webhookDispatchIntervalMs: number;
+  webhookRequestTimeoutMs: number;
+  webhookLeaseMs: number;
+  webhookMaxAttempts: number;
+  webhookDisableAfterFailures: number;
   smtpRejectUnauthorized: boolean;
   workerId: string;
   workerVersion: string;

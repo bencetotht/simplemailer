@@ -42,6 +42,7 @@ export interface Metrics {
   autoscalePressure: Gauge;
   legacyPlaintextSecrets: Gauge;
   openCircuits: Gauge;
+  webhookDeliveries: Counter;
   registry: Registry;
   autoscaleSnapshot: AutoscaleSnapshot;
   incInFlight: () => void;
@@ -148,6 +149,12 @@ export function createMetrics(): Metrics {
     openCircuits: new Gauge({
       name: 'mailer_circuit_breaker_open',
       help: 'Number of open SMTP circuit breakers',
+      registers: [registry],
+    }),
+    webhookDeliveries: new Counter({
+      name: 'mailer_webhook_deliveries_total',
+      help: 'Webhook delivery attempts by bounded outcome',
+      labelNames: ['outcome'],
       registers: [registry],
     }),
     registry,

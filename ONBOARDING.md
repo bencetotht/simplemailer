@@ -13,7 +13,10 @@ Projects, scoped keys, sender aliases, inline `/v1/messages`, and the initial
 `@simplemailer/sdk` message client are implemented. The SDK also contains a
 typed declarative diff/sync engine, and the CLI can validate JSON/YAML manifests
 locally. Project-scoped sender/template management endpoints, managed template
-versions, MJML, remote reconciliation, and webhooks are still target behavior.
+versions, MJML, and remote reconciliation are still target behavior. The first
+signed webhook slice is implemented with project-scoped endpoint management,
+replay-safe event IDs, encrypted/rotatable secrets, and leased at-least-once
+delivery.
 Examples using those pending capabilities are aspirational.
 
 ## Design goal
@@ -470,6 +473,7 @@ Initial scopes:
 - `senders:write`
 - `webhooks:read`
 - `webhooks:write`
+- `webhooks:replay`
 - `admin`
 
 Send-only application keys must not be able to read other recipients, retrieve

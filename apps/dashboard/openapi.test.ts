@@ -63,6 +63,17 @@ describe("authoritative OpenAPI contract", () => {
     expect(checkedInSpec.paths["/v1/messages"].post.responses["503"]).toBeDefined();
   });
 
+  test("documents scoped signed webhook management and replay", () => {
+    expect(checkedInSpec.paths["/v1/webhooks"].post.security)
+      .toEqual([{ ProjectBearerKey: ["webhooks:write"] }]);
+    expect(checkedInSpec.paths["/v1/webhooks"].get.security)
+      .toEqual([{ ProjectBearerKey: ["webhooks:read"] }]);
+    expect(checkedInSpec.paths["/v1/webhook-events/{id}/replay"].post.security)
+      .toEqual([{ ProjectBearerKey: ["webhooks:replay"] }]);
+    expect(checkedInSpec.paths["/v1/webhooks/{id}/rotate-secret"]).toBeDefined();
+    expect(checkedInSpec.paths["/v1/webhooks/{id}/test"]).toBeDefined();
+  });
+
   test("validates a runtime health response against its schema", async () => {
     const response = healthCheck();
     const payload = await response.json();

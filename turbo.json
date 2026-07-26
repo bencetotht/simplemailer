@@ -15,7 +15,12 @@
         "S3_SESSION_TOKEN",
         "S3_FORCE_PATH_STYLE",
         "S3_CREATE_BUCKET",
-        "S3_BUCKET"
+        "S3_BUCKET",
+        "WEBHOOK_DISPATCH_INTERVAL_MS",
+        "WEBHOOK_REQUEST_TIMEOUT_MS",
+        "WEBHOOK_LEASE_MS",
+        "WEBHOOK_MAX_ATTEMPTS",
+        "WEBHOOK_DISABLE_AFTER_FAILURES"
       ]
     },
     "dev": {
@@ -40,7 +45,12 @@
         "S3_SESSION_TOKEN",
         "S3_FORCE_PATH_STYLE",
         "S3_CREATE_BUCKET",
-        "S3_BUCKET"
+        "S3_BUCKET",
+        "WEBHOOK_DISPATCH_INTERVAL_MS",
+        "WEBHOOK_REQUEST_TIMEOUT_MS",
+        "WEBHOOK_LEASE_MS",
+        "WEBHOOK_MAX_ATTEMPTS",
+        "WEBHOOK_DISABLE_AFTER_FAILURES"
       ]
     },
     "lint": {},

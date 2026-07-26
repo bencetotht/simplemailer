@@ -37,6 +37,9 @@ model Project {
   senders            Sender[]
   contentArtifacts   ContentArtifact[]
   messages           Message[]
+  webhookEndpoints   WebhookEndpoint[]
+  webhookEvents      WebhookEvent[]
+  auditEvents        AuditEvent[]
 }
 
 model ApiKey {
@@ -130,6 +133,7 @@ model Message {
   deletedAt             DateTime?
   createdAt             DateTime @default(now())
   updatedAt             DateTime @updatedAt
+  webhookEvents         WebhookEvent[]
 
   @@unique([projectId, idempotencyKey])
   @@index([projectId, status, createdAt])
@@ -138,6 +142,84 @@ model Message {
   @@index([senderId])
   @@index([htmlArtifactId])
   @@index([textArtifactId])
+}
+
+model WebhookEndpoint {
+  id                    String                @id
+  projectId             String
+  project               Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url                   String
+  description           String?
+  signingSecretEnc      String
+  previousSecretEnc     String?
+  previousSecretExpiresAt DateTime?
+  eventTypes            WebhookEventType[]
+  status                WebhookEndpointStatus @default(ACTIVE)
+  consecutiveFailures   Int                   @default(0)
+  lastSuccessAt         DateTime?
+  lastFailureAt         DateTime?
+  disabledAt            DateTime?
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  deliveries            WebhookDelivery[]
+
+  @@index([projectId, status])
+}
+
+model WebhookEvent {
+  id         String           @id
+  projectId  String
+  project    Project          @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  messageId  String?
+  message    Message?         @relation(fields: [messageId], references: [id], onDelete: SetNull)
+  type       WebhookEventType
+  payload    Json
+  occurredAt DateTime         @default(now())
+  createdAt  DateTime         @default(now())
+  deliveries WebhookDelivery[]
+
+  @@index([projectId, occurredAt])
+  @@index([messageId, occurredAt])
+}
+
+model WebhookDelivery {
+  id               String                @id
+  eventId          String
+  event            WebhookEvent          @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  endpointId       String
+  endpoint         WebhookEndpoint       @relation(fields: [endpointId], references: [id], onDelete: Cascade)
+  targetUrl        String
+  signingSecretEnc String
+  status           WebhookDeliveryStatus @default(PENDING)
+  attemptCount     Int                   @default(0)
+  nextAttemptAt    DateTime               @default(now())
+  processingOwner  String?
+  leaseExpiresAt   DateTime?
+  responseStatus   Int?
+  responseSummary  String?
+  lastError        String?
+  deliveredAt      DateTime?
+  createdAt        DateTime               @default(now())
+  updatedAt        DateTime               @updatedAt
+
+  @@index([eventId, endpointId])
+  @@index([status, nextAttemptAt])
+  @@index([endpointId, createdAt])
+}
+
+model AuditEvent {
+  id            String   @id
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorApiKeyId String?
+  action        String
+  targetType    String
+  targetId      String
+  metadata      Json     @default("{}")
+  occurredAt    DateTime @default(now())
+
+  @@index([projectId, occurredAt])
+  @@index([targetType, targetId])
 }
 
 // Templates
@@ -290,4 +372,29 @@ enum ArtifactFormat {
   HTML
   TEXT
   MJML
+}
+
+enum WebhookEventType {
+  MESSAGE_ACCEPTED
+  MESSAGE_QUEUED
+  MESSAGE_PROCESSING
+  MESSAGE_RETRYING
+  MESSAGE_SENT
+  MESSAGE_FAILED
+  MESSAGE_DEAD
+  MESSAGE_DELIVERY_UNCERTAIN
+  ENDPOINT_TEST
+}
+
+enum WebhookEndpointStatus {
+  ACTIVE
+  PAUSED
+  DISABLED
+}
+
+enum WebhookDeliveryStatus {
+  PENDING
+  PROCESSING
+  SUCCEEDED
+  FAILED
 }

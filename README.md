@@ -85,6 +85,8 @@ OpenAPI documentation is served at `/api/docs`. Important endpoints include:
 
 - `POST /v1/messages` and `GET /v1/messages/{id}` for project-scoped immutable
   inline messages
+- `/v1/webhooks` for project-scoped signed delivery endpoints, secret rotation,
+  endpoint tests, and event replay
 - `POST /api/send` for one message
 - `POST /api/send/bulk` and `GET /api/send/bulk/{id}` for paced batches
 - `/api/account`, `/api/template`, and `/api/bucket` for configuration
@@ -107,6 +109,33 @@ The full project key is printed once; only its prefix and scrypt hash are
 stored. The initial `/v1/messages` slice accepts exactly one recipient and
 inline HTML with optional text. MJML and managed template versions remain
 planned Phase 2 work.
+
+To manage webhooks, create a control-plane key with `webhooks:read`,
+`webhooks:write`, and `webhooks:replay` in
+`SIMPLEMAILER_API_KEY_SCOPES`. Endpoint signing secrets are returned only on
+creation or rotation and are encrypted at rest. Production webhook URLs must
+use HTTPS; localhost HTTP is accepted only for local development.
+
+Webhook requests contain the exact stored JSON event body and these headers:
+
+```text
+SimpleMailer-Event-Id: evt_...
+SimpleMailer-Timestamp: 1722000000
+SimpleMailer-Signature: v1=<hex HMAC-SHA256>
+```
+
+Verify the signature over `<timestamp>.<raw request body>` before parsing JSON,
+use a constant-time comparison, reject timestamps outside a five-minute replay
+window, and deduplicate by event ID. Delivery is at-least-once. Failed
+deliveries use capped exponential backoff with jitter; endpoints are disabled
+after the configured consecutive-failure threshold. Secret rotation has a
+24-hour overlap, and already-created deliveries retain their original secret
+and target URL snapshots.
+
+Production deployments should also enforce outbound network policy for webhook
+workers. The application rejects local/private targets and rechecks DNS before
+delivery, but infrastructure egress controls remain the authoritative SSRF
+boundary.
 
 TypeScript server applications can use the workspace SDK:
 

@@ -1,4 +1,5 @@
 import { Status } from "database";
+import { recordMessageWebhookEvent } from "database/webhooks";
 import { prisma } from "@/lib/db";
 import { logServerError } from "@/lib/log";
 import { publishToMailerQueueV3 } from "@/lib/queue";
@@ -16,15 +17,21 @@ export async function publishMessageRecord(message: {
       attempt: 0,
       correlationId: message.correlationId,
     });
-    await prisma.message.updateMany({
-      where: { id: message.id, status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] } },
-      data: {
-        status: Status.QUEUED,
-        queuedAt: new Date(),
-        lastAttemptAt: new Date(),
-        lastError: null,
-        failureClass: null,
-      },
+    await prisma.$transaction(async (tx) => {
+      const queuedAt = new Date();
+      const result = await tx.message.updateMany({
+        where: { id: message.id, status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] } },
+        data: {
+          status: Status.QUEUED,
+          queuedAt,
+          lastAttemptAt: queuedAt,
+          lastError: null,
+          failureClass: null,
+        },
+      });
+      if (result.count === 0) return;
+      const updated = await tx.message.findUniqueOrThrow({ where: { id: message.id } });
+      await recordMessageWebhookEvent(tx, updated, queuedAt);
     });
     return true;
   } catch (error) {
