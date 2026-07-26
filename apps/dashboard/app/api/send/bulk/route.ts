@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { Prisma, Status } from "database";
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
 import { logServerError } from "@/lib/log";
@@ -12,6 +12,9 @@ import {
   validateBulkRecipients,
 } from "@/lib/bulk-send";
 import { bulkMailJobSchema } from "@/lib/validators";
+import { apiError, getRequestMetadata, JSON_LIMITS, jsonResponse, readJsonBody } from "@/lib/http";
+import { canonicalRequestDigest, isMateriallyDifferent } from "@/lib/idempotency";
+import { MAX_IDEMPOTENCY_KEY_LENGTH } from "@/lib/legacy-contract";
 
 class RouteError extends Error {
   constructor(
@@ -29,6 +32,7 @@ type ExistingBatchResponse = {
   acceptedCount: number;
   rejectedCount: number;
   effectiveMinDelayMs: number;
+  requestDigest: string | null;
   items: Array<{
     sequence: number;
     recipient: string;
@@ -36,8 +40,9 @@ type ExistingBatchResponse = {
   }>;
 };
 
-function acceptedResponse(batch: ExistingBatchResponse) {
-  return NextResponse.json(
+function acceptedResponse(request: NextRequest, batch: ExistingBatchResponse) {
+  return jsonResponse(
+    request,
     {
       success: true,
       batchId: batch.id,
@@ -66,6 +71,7 @@ async function findBatchForResponse(enqueueKey: string): Promise<ExistingBatchRe
       acceptedCount: true,
       rejectedCount: true,
       effectiveMinDelayMs: true,
+      requestDigest: true,
       items: {
         where: { validationError: { not: null } },
         orderBy: { sequence: "asc" },
@@ -127,67 +133,82 @@ export async function POST(request: NextRequest) {
     refillWindowMs: 60_000,
   });
   if (!rateLimit.allowed) {
-    return NextResponse.json(
-      { success: false, message: "Rate limit exceeded" },
-      {
-        status: 429,
-        headers: { "Retry-After": String(rateLimit.retryAfterSeconds) },
-      },
+    return apiError(
+      request,
+      429,
+      "RATE_LIMITED",
+      "Rate limit exceeded",
+      { headers: { "Retry-After": String(rateLimit.retryAfterSeconds) } },
     );
   }
 
-  let body: unknown;
-  try {
-    body = await request.json();
-  } catch {
-    return NextResponse.json(
-      { success: false, message: "Request body must be valid JSON" },
-      { status: 400 },
-    );
-  }
-  const parsed = bulkMailJobSchema.safeParse(body);
+  const body = await readJsonBody(request, JSON_LIMITS.bulkSend);
+  if (!body.ok) return body.response;
+  const parsed = bulkMailJobSchema.safeParse(body.value);
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 },
+    return apiError(
+      request,
+      400,
+      "VALIDATION_FAILED",
+      "Request validation failed",
+      { details: parsed.error.flatten().fieldErrors },
     );
   }
 
+  const requestDigest = canonicalRequestDigest(parsed.data);
   const enqueueKey = request.headers.get("idempotency-key")?.trim() || null;
-  if (enqueueKey && enqueueKey.length > 256) {
-    return NextResponse.json(
-      { success: false, message: "Idempotency-Key must be at most 256 characters" },
-      { status: 400 },
+  if (enqueueKey && enqueueKey.length > MAX_IDEMPOTENCY_KEY_LENGTH) {
+    return apiError(
+      request,
+      400,
+      "INVALID_IDEMPOTENCY_KEY",
+      `Idempotency-Key must be at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters`,
     );
   }
   if (enqueueKey) {
     const existingBatch = await findBatchForResponse(enqueueKey);
     if (existingBatch) {
-      return acceptedResponse(existingBatch);
+      if (isMateriallyDifferent(existingBatch.requestDigest, requestDigest)) {
+        return apiError(
+          request,
+          409,
+          "IDEMPOTENCY_CONFLICT",
+          "Idempotency-Key was already used with a different request",
+        );
+      }
+      return acceptedResponse(request, existingBatch);
     }
   }
 
   const sharedValues = parsed.data.sharedValues;
   const { accepted, rejected } = validateBulkRecipients(parsed.data.recipients, sharedValues);
   if (accepted.length === 0) {
-    return NextResponse.json(
+    return apiError(
+      request,
+      400,
+      "ALL_RECIPIENTS_REJECTED",
+      "All recipients were rejected",
       {
-        success: false,
-        message: "All recipients were rejected",
-        rejectedItems: rejected.map((item) => ({
+        details: rejected.map((item) => ({
           index: item.index,
           recipient: item.recipient,
           error: item.error,
         })),
+        compatibilityFields: {
+          rejectedItems: rejected.map((item) => ({
+            index: item.index,
+            recipient: item.recipient,
+            error: item.error,
+          })),
+        },
       },
-      { status: 400 },
     );
   }
 
   const requestedMinDelayMs = parsed.data.options?.minDelayMs;
   const effectiveMinDelayMs = clampBulkMinDelayMs(requestedMinDelayMs);
   const now = new Date();
-  const batchCorrelationId = randomUUID();
+  const { requestId, correlationId: batchCorrelationId } = getRequestMetadata(request);
 
   try {
     const created = await prisma.$transaction(async (tx) => {
@@ -233,6 +254,7 @@ export async function POST(request: NextRequest) {
           acceptedCount: accepted.length,
           rejectedCount: rejected.length,
           enqueueKey,
+          requestDigest,
           correlationId: batchCorrelationId,
           requestedMinDelayMs: requestedMinDelayMs === undefined ? null : Math.round(requestedMinDelayMs),
           effectiveMinDelayMs,
@@ -302,7 +324,8 @@ export async function POST(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(
+    return jsonResponse(
+      request,
       {
         success: true,
         batchId: created.batchId,
@@ -316,24 +339,42 @@ export async function POST(request: NextRequest) {
     );
   } catch (error) {
     if (error instanceof RouteError) {
-      return NextResponse.json(error.body, { status: error.status });
+      const code = error.status === 404
+        ? error.message === "Account not found"
+          ? "ACCOUNT_NOT_FOUND"
+          : "TEMPLATE_NOT_FOUND"
+        : "BULK_REQUEST_FAILED";
+      return apiError(request, error.status, code, error.message);
     }
 
     if (isIdempotencyConflict(error) && enqueueKey) {
       const existingBatch = await findBatchForResponse(enqueueKey);
       if (existingBatch) {
-        return acceptedResponse(existingBatch);
+        if (isMateriallyDifferent(existingBatch.requestDigest, requestDigest)) {
+          return apiError(
+            request,
+            409,
+            "IDEMPOTENCY_CONFLICT",
+            "Idempotency-Key was already used with a different request",
+          );
+        }
+        return acceptedResponse(request, existingBatch);
       }
     }
 
     logServerError("api.send_bulk.create_failed", error, {
       accountId: parsed.data.accountId,
       recipientCount: parsed.data.recipients.length,
+      requestId,
+      correlationId: batchCorrelationId,
+      enqueueKey,
     });
 
-    return NextResponse.json(
-      { success: false, message: "Failed to create bulk batch" },
-      { status: 500 },
+    return apiError(
+      request,
+      500,
+      "PERSISTENCE_FAILED",
+      "Failed to create bulk batch",
     );
   }
 }

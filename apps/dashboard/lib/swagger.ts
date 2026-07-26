@@ -1,5 +1,5 @@
-import spec from "@/openapi.json";
+import { openApiDocument } from "@/lib/legacy-contract";
 
 export function getApiDocs() {
-  return spec;
+  return openApiDocument;
 }

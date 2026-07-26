@@ -5,8 +5,16 @@ import { templateUpdateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
 import { deleteTemplate, getTemplate, putTemplate } from "@/lib/template-storage";
+import {
+  apiError,
+  JSON_LIMITS,
+  jsonResponse,
+  readJsonBody,
+  withTimeout,
+} from "@/lib/http";
 
 const TEMPLATES_DIR = path.join(process.cwd(), "../../templates");
+const TEMPLATE_STORAGE_TIMEOUT_MS = 10_000;
 
 export async function DELETE(
   _request: NextRequest,
@@ -18,17 +26,29 @@ export async function DELETE(
   const { id } = await params;
 
   try {
+    const existing = await prisma.template.findUnique({ where: { id } });
+    if (!existing) {
+      return apiError(_request, 404, "TEMPLATE_NOT_FOUND", "Template not found");
+    }
     const template = await prisma.template.delete({ where: { id } });
     if (template.storageType === "S3") {
-      try { await deleteTemplate(template.filename); } catch { /* orphan cleanup can be retried */ }
+      try {
+        await withTimeout(
+          deleteTemplate(template.filename),
+          TEMPLATE_STORAGE_TIMEOUT_MS,
+          "template delete",
+        );
+      } catch { /* orphan cleanup can be retried */ }
     } else {
       try { fs.unlinkSync(path.join(TEMPLATES_DIR, template.filename)); } catch { /* already absent */ }
     }
-    return NextResponse.json({ success: true });
+    return jsonResponse(_request, { success: true });
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Failed to delete template" },
-      { status: 500 }
+    return apiError(
+      _request,
+      500,
+      "TEMPLATE_DELETE_FAILED",
+      "Failed to delete template",
     );
   }
 }
@@ -58,17 +78,21 @@ export async function GET(
 
   const template = await prisma.template.findUnique({ where: { id } });
   if (!template) {
-    return NextResponse.json({ error: "Template not found" }, { status: 404 });
+    return apiError(_request, 404, "TEMPLATE_NOT_FOUND", "Template not found");
   }
 
   if (template.storageType === "S3") {
     try {
-      return new NextResponse(await getTemplate(template.filename), {
+      return new NextResponse(await withTimeout(
+        getTemplate(template.filename),
+        TEMPLATE_STORAGE_TIMEOUT_MS,
+        "template read",
+      ), {
         status: 200,
         headers: { "Content-Type": "text/plain; charset=utf-8" },
       });
     } catch {
-      return NextResponse.json({ error: "Template object not found" }, { status: 404 });
+      return apiError(_request, 404, "TEMPLATE_CONTENT_NOT_FOUND", "Template object not found");
     }
   }
 
@@ -82,7 +106,7 @@ export async function GET(
       headers: { "Content-Type": "text/plain" },
     });
   } catch {
-    return NextResponse.json({ error: "Template file not found" }, { status: 404 });
+    return apiError(_request, 404, "TEMPLATE_CONTENT_NOT_FOUND", "Template file not found");
   }
 }
 
@@ -103,18 +127,22 @@ export async function PATCH(
 
   const { id } = await params;
 
-  const template = await prisma.template.findUnique({ where: { id } });
-  if (!template) {
-    return NextResponse.json({ error: "Template not found" }, { status: 404 });
+  const body = await readJsonBody(request, JSON_LIMITS.controlPlane);
+  if (!body.ok) return body.response;
+  const parsed = templateUpdateSchema.safeParse(body.value);
+  if (!parsed.success) {
+    return apiError(
+      request,
+      400,
+      "VALIDATION_FAILED",
+      "Request validation failed",
+      { details: parsed.error.flatten().fieldErrors },
+    );
   }
 
-  const body = await request.json();
-  const parsed = templateUpdateSchema.safeParse(body);
-  if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 }
-    );
+  const template = await prisma.template.findUnique({ where: { id } });
+  if (!template) {
+    return apiError(request, 404, "TEMPLATE_NOT_FOUND", "Template not found");
   }
 
   const { name, subject, content } = parsed.data;
@@ -124,19 +152,27 @@ export async function PATCH(
     try {
       fs.writeFileSync(path.join(TEMPLATES_DIR, template.filename), content, "utf8");
     } catch {
-      return NextResponse.json(
-        { success: false, message: "Failed to write template file" },
-        { status: 500 }
+      return apiError(
+        request,
+        500,
+        "TEMPLATE_STORAGE_FAILED",
+        "Failed to write template file",
       );
     }
   }
   if (content !== undefined && template.storageType === "S3") {
     try {
-      await putTemplate(template.filename, content);
+      await withTimeout(
+        putTemplate(template.filename, content),
+        TEMPLATE_STORAGE_TIMEOUT_MS,
+        "template upload",
+      );
     } catch {
-      return NextResponse.json(
-        { success: false, message: "Failed to upload template" },
-        { status: 503 },
+      return apiError(
+        request,
+        503,
+        "TEMPLATE_STORAGE_UNAVAILABLE",
+        "Failed to upload template",
       );
     }
   }
@@ -149,11 +185,13 @@ export async function PATCH(
         ...(subject !== undefined ? { subject } : {}),
       },
     });
-    return NextResponse.json({ success: true });
+    return jsonResponse(request, { success: true });
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Failed to update template" },
-      { status: 500 }
+    return apiError(
+      request,
+      500,
+      "TEMPLATE_UPDATE_FAILED",
+      "Failed to update template",
     );
   }
 }

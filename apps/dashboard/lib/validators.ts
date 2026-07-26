@@ -29,7 +29,7 @@ export const accountSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
   emailHost: z.string().min(1),
-  emailPort: z.number(),
+  emailPort: z.number().int().min(1).max(65535),
 });
 
 export const bucketSchema = z.object({
@@ -51,4 +51,6 @@ export const templateUpdateSchema = z.object({
   name: z.string().min(1).optional(),
   subject: z.string().min(1).optional(),
   content: z.string().optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: "At least one field must be provided",
 });

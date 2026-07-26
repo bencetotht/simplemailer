@@ -34,6 +34,22 @@ docker compose up --build
 
 The dashboard is available at `http://localhost:3001`, RabbitMQ management at `http://localhost:15672`, and worker metrics at `http://localhost:9091/metrics`.
 
+Dashboard browser access and service API access use separate credentials:
+
+- `DASHBOARD_PASSWORD` signs an operator into the dashboard. The server stores
+  the resulting session in an HttpOnly cookie.
+- `DASHBOARD_SESSION_SECRET` signs that cookie; generate it independently with
+  `openssl rand -base64 32`.
+- `DASHBOARD_API_KEY` remains the temporary `x-api-key` credential for legacy
+  server-to-server API calls. The dashboard's server-side proxy holds it, so it
+  is never included in browser JavaScript.
+
+Production fails closed if any required dashboard authentication value is
+missing. For local development only, leaving `DASHBOARD_PASSWORD` and
+`DASHBOARD_SESSION_SECRET` unset permits direct dashboard access; leaving
+`DASHBOARD_API_KEY` unset permits unauthenticated legacy API access and emits a
+warning. Set all three locally when testing the production boundary.
+
 For host-based development:
 
 ```bash
@@ -70,6 +86,26 @@ OpenAPI documentation is served at `/api/docs`. Important endpoints include:
 - `/api/logs`, `/api/jobs`, and `/api/workers` for operational state
 
 Protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put this service credential in a `NEXT_PUBLIC_*` environment variable.
+
+`apps/dashboard/lib/legacy-contract.ts` is the source of truth for the current
+OpenAPI document. Generate the checked-in artifact with:
+
+```bash
+pnpm --filter dashboard openapi:generate
+```
+
+CI regenerates `apps/dashboard/openapi.json` and fails on drift.
+
+Mutation routes enforce bounded JSON bodies: 256 KiB for control-plane
+configuration, 1 MiB for individual sends, and 4 MiB for bulk sends. Deployments
+must also configure their ingress or load balancer with a 4 MiB maximum request
+body. The application rejects a declared body above 4 MiB before routing and
+also enforces the narrower route limit while streaming the body.
+
+The current rate limiter is process-local and is intended only for local and
+single-replica stabilization. It is not HA. Forwarded client IP headers are
+ignored unless `TRUST_PROXY=true`; only enable that setting when every request
+reaches SimpleMailer through a trusted proxy.
 
 ## Delivery semantics
 

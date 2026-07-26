@@ -1,15 +1,10 @@
-const API_URL = '/api';
+const API_URL = '/api/dashboard';
 
 type JsonRecord = Record<string, unknown>;
 
 const defaultJsonHeaders = {
   'Content-Type': 'application/json',
 } as const;
-
-function getApiKeyHeader(): Record<string, string> {
-  const apiKey = process.env.NEXT_PUBLIC_DASHBOARD_API_KEY;
-  return apiKey ? { 'x-api-key': apiKey } : {};
-}
 
 function mergeHeaders(
   ...headersList: Array<HeadersInit | undefined>
@@ -24,7 +19,7 @@ function mergeHeaders(
 }
 
 async function fetchApi(path: string, init?: RequestInit): Promise<Response> {
-  const headers = mergeHeaders(getApiKeyHeader(), init?.headers);
+  const headers = mergeHeaders(init?.headers);
   return fetch(`${API_URL}${path}`, { ...init, headers });
 }
 
