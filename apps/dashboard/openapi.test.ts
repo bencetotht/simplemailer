@@ -49,6 +49,20 @@ describe("authoritative OpenAPI contract", () => {
     expect(LEGACY_STATUS_VALUES).toContain("DELIVERY_UNCERTAIN");
   });
 
+  test("documents the scoped immutable message boundary", () => {
+    expect(checkedInSpec.components.securitySchemes.ProjectBearerKey).toMatchObject({
+      type: "http",
+      scheme: "bearer",
+    });
+    expect(checkedInSpec.paths["/v1/messages"].post.security)
+      .toEqual([{ ProjectBearerKey: ["messages:send"] }]);
+    expect(checkedInSpec.paths["/v1/messages/{id}"].get.security)
+      .toEqual([{ ProjectBearerKey: ["messages:read"] }]);
+    expect(checkedInSpec.paths["/v1/messages"].post.responses["202"]).toBeDefined();
+    expect(checkedInSpec.paths["/v1/messages"].post.responses["409"]).toBeDefined();
+    expect(checkedInSpec.paths["/v1/messages"].post.responses["503"]).toBeDefined();
+  });
+
   test("validates a runtime health response against its schema", async () => {
     const response = healthCheck();
     const payload = await response.json();

@@ -10,6 +10,7 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
+    "project:bootstrap": "tsx scripts/bootstrap-project.ts",
     "clean": "rm -rf .next"
   },
   "dependencies": {

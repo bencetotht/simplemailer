@@ -14,6 +14,7 @@ function isExcluded(pathname: string): boolean {
     pathname === "/favicon.ico" ||
     pathname === "/api/health" ||
     pathname === "/api/dashboard-session" ||
+    pathname.startsWith("/v1/") ||
     (pathname.startsWith("/api/") && !pathname.startsWith("/api/dashboard/"))
   );
 }

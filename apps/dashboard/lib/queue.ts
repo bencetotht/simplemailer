@@ -63,6 +63,13 @@ export interface QueueMessageV2 {
   data: unknown;
 }
 
+export interface QueueMessageV3 {
+  version: 3;
+  messageId: string;
+  attempt: number;
+  correlationId: string;
+}
+
 export async function publishToMailerQueue(
   message: QueueMessageV2,
   timeoutMs = 5000,
@@ -81,6 +88,34 @@ export async function publishToMailerQueue(
         correlationId: message.correlationId,
         contentType: "application/json",
         headers: { attempt: message.attempt },
+      },
+      timeoutMs,
+    );
+  } catch (error) {
+    logServerError("queue.publish_failed", error);
+    channelPromise = null;
+    throw error;
+  }
+}
+
+export async function publishToMailerQueueV3(
+  message: QueueMessageV3,
+  timeoutMs = 5000,
+): Promise<void> {
+  const channel = await getChannel();
+  const payload = Buffer.from(JSON.stringify(message));
+  try {
+    await waitForPublishConfirm(
+      channel,
+      MAIN_EXCHANGE,
+      MAIN_ROUTING_KEY,
+      payload,
+      {
+        persistent: true,
+        messageId: message.messageId,
+        correlationId: message.correlationId,
+        contentType: "application/json",
+        headers: { attempt: message.attempt, version: 3 },
       },
       timeoutMs,
     );

@@ -17,7 +17,14 @@ export interface QueueMessageV2 {
   data: MailJob;
 }
 
-export type QueueMessage = QueueMessageV1 | QueueMessageV2;
+export interface QueueMessageV3 {
+  version: 3;
+  messageId: string;
+  attempt: number;
+  correlationId: string;
+}
+
+export type QueueMessage = QueueMessageV1 | QueueMessageV2 | QueueMessageV3;
 
 export interface WorkerConfig {
   rabbitmqUrl: string;

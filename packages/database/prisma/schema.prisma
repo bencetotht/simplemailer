@@ -22,6 +22,122 @@ model Account {
   updatedAt DateTime @updatedAt
   Log       Log[]
   BulkSendBatch BulkSendBatch[]
+  senders   Sender[]
+}
+
+model Project {
+  id                 String        @id @default(cuid())
+  slug               String        @unique
+  name               String
+  status             ProjectStatus @default(ACTIVE)
+  defaultRetentionDays Int?
+  createdAt          DateTime      @default(now())
+  updatedAt          DateTime      @updatedAt
+  apiKeys            ApiKey[]
+  senders            Sender[]
+  contentArtifacts   ContentArtifact[]
+  messages           Message[]
+}
+
+model ApiKey {
+  id         String   @id @default(cuid())
+  projectId  String
+  project    Project  @relation(fields: [projectId], references: [id])
+  name       String
+  prefix     String   @unique
+  keyHash    String
+  scopes     String[]
+  expiresAt  DateTime?
+  lastUsedAt DateTime?
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([projectId, revokedAt])
+}
+
+model Sender {
+  id             String       @id @default(cuid())
+  projectId      String
+  project        Project      @relation(fields: [projectId], references: [id])
+  alias          String
+  displayName    String
+  fromAddress    String
+  replyTo        String?
+  accountId      String
+  account        Account      @relation(fields: [accountId], references: [id])
+  status         SenderStatus @default(ACTIVE)
+  verifiedAt     DateTime?
+  maxConcurrency Int?
+  maxPerMinute   Int?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+  messages       Message[]
+
+  @@unique([projectId, alias])
+  @@index([accountId])
+}
+
+model ContentArtifact {
+  id         String         @id @default(cuid())
+  projectId  String
+  project    Project        @relation(fields: [projectId], references: [id])
+  digest     String
+  format     ArtifactFormat
+  byteLength Int
+  content    String?
+  objectKey  String?
+  createdAt  DateTime       @default(now())
+  htmlMessages Message[]    @relation("MessageHtmlArtifact")
+  textMessages Message[]    @relation("MessageTextArtifact")
+
+  @@unique([projectId, digest, format])
+  @@index([projectId, createdAt])
+}
+
+model Message {
+  id                    String   @id
+  projectId             String
+  project               Project  @relation(fields: [projectId], references: [id])
+  senderId              String
+  sender                Sender   @relation(fields: [senderId], references: [id])
+  recipient             String
+  resolvedFrom          String
+  resolvedReplyTo       String?
+  subject               String
+  htmlArtifactId        String
+  htmlArtifact          ContentArtifact @relation("MessageHtmlArtifact", fields: [htmlArtifactId], references: [id])
+  textArtifactId        String?
+  textArtifact          ContentArtifact? @relation("MessageTextArtifact", fields: [textArtifactId], references: [id])
+  tags                  Json     @default("{}")
+  idempotencyKey        String?
+  requestDigest         String
+  requestId             String
+  correlationId         String
+  status                Status   @default(ENQUEUE_PENDING)
+  retryCount            Int      @default(0)
+  nextAttemptAt         DateTime?
+  lastAttemptAt         DateTime?
+  processingOwner       String?
+  processingLeaseExpiresAt DateTime?
+  deliveryAttemptStartedAt DateTime?
+  failureClass          String?
+  lastError             String?
+  acceptedAt            DateTime @default(now())
+  queuedAt              DateTime?
+  completedAt           DateTime?
+  retentionUntil        DateTime?
+  deletedAt             DateTime?
+  createdAt             DateTime @default(now())
+  updatedAt             DateTime @updatedAt
+
+  @@unique([projectId, idempotencyKey])
+  @@index([projectId, status, createdAt])
+  @@index([status, createdAt])
+  @@index([status, processingLeaseExpiresAt])
+  @@index([senderId])
+  @@index([htmlArtifactId])
+  @@index([textArtifactId])
 }
 
 // Templates
@@ -158,4 +274,20 @@ enum Status {
   RETRYING
   DEAD
   DELIVERY_UNCERTAIN
+}
+
+enum ProjectStatus {
+  ACTIVE
+  SUSPENDED
+}
+
+enum SenderStatus {
+  ACTIVE
+  DISABLED
+}
+
+enum ArtifactFormat {
+  HTML
+  TEXT
+  MJML
 }

@@ -97,3 +97,50 @@ export async function sendMail(
     throw classifySendError(err);
   }
 }
+
+export interface ImmutableMailSnapshot {
+  recipient: string;
+  resolvedFrom: string;
+  resolvedReplyTo: string | null;
+  subject: string;
+  html: string;
+  text: string | null;
+}
+
+export async function sendImmutableMail(
+  account: AccountCredentials,
+  message: ImmutableMailSnapshot,
+  config: WorkerConfig,
+  onDeliveryStart?: () => void | Promise<void>,
+): Promise<void> {
+  const port = account.emailPort ?? 587;
+  let transporter;
+  try {
+    transporter = nodemailer.createTransport({
+      host: account.emailHost,
+      port,
+      secure: port === 465,
+      auth: { user: account.username, pass: account.password },
+      connectionTimeout: 10_000,
+      greetingTimeout: 10_000,
+      socketTimeout: 30_000,
+      tls: { rejectUnauthorized: config.smtpRejectUnauthorized },
+    });
+  } catch (err) {
+    throw new ValueError(`Failed to initialize mailer: ${err}`);
+  }
+
+  try {
+    await onDeliveryStart?.();
+    await transporter.sendMail({
+      from: message.resolvedFrom,
+      replyTo: message.resolvedReplyTo ?? undefined,
+      to: message.recipient,
+      subject: message.subject,
+      html: message.html,
+      text: message.text ?? undefined,
+    });
+  } catch (err) {
+    throw classifySendError(err);
+  }
+}
