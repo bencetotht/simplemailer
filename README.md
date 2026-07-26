@@ -54,6 +54,12 @@ pnpm build
 
 CI also applies the complete migration history to a fresh PostgreSQL database.
 
+## Template storage
+
+Production templates use AWS S3 by default. Set `S3_BUCKET` and `S3_REGION`; when running on AWS, leave the custom S3 credentials and endpoint unset so the standard AWS credential provider chain can use an ECS task role, EKS workload identity, EC2 instance profile, or local AWS profile.
+
+MinIO and other S3-compatible services are supported by setting `S3_ENDPOINT` and, when required, `S3_FORCE_PATH_STYLE=true`. The local Compose stack configures these compatibility options automatically. Bucket creation is disabled by default for production safety and is enabled locally with `S3_CREATE_BUCKET=true`.
+
 ## API
 
 OpenAPI documentation is served at `/api/docs`. Important endpoints include:

@@ -4,6 +4,7 @@ import { requireApiKey } from "@/lib/auth";
 import { templateCreateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
+import { deleteTemplate, putTemplate } from "@/lib/template-storage";
 
 const TEMPLATES_DIR = path.join(process.cwd(), "../../templates");
 
@@ -56,6 +57,13 @@ export async function POST(request: NextRequest) {
   const slug = name.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const filename = `${slug}.mjml`;
 
+  if (storageType === "LOCAL" && process.env.NODE_ENV === "production") {
+    return NextResponse.json(
+      { success: false, message: "LOCAL templates are development-only; use S3 storage" },
+      { status: 400 },
+    );
+  }
+
   if (storageType === "LOCAL") {
     try {
       fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
@@ -74,6 +82,16 @@ export async function POST(request: NextRequest) {
       );
     }
   }
+  if (storageType === "S3") {
+    try {
+      await putTemplate(filename, content);
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Failed to upload template" },
+        { status: 503 },
+      );
+    }
+  }
 
   try {
     const result = await prisma.template.create({
@@ -84,6 +102,9 @@ export async function POST(request: NextRequest) {
     // Roll back file write if DB fails
     if (storageType === "LOCAL") {
       try { fs.unlinkSync(path.join(TEMPLATES_DIR, filename)); } catch { /* ignore */ }
+    }
+    if (storageType === "S3") {
+      try { await deleteTemplate(filename); } catch { /* ignore orphan cleanup failure */ }
     }
     return NextResponse.json(
       { success: false, message: "Failed to create template" },

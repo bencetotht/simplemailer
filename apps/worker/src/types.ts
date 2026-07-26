@@ -27,10 +27,12 @@ export interface WorkerConfig {
   publishConfirmTimeoutMs: number;
   templatePath: string;
   s3Endpoint?: string;
-  s3Port?: number;
+  s3Region: string;
   s3AccessKey?: string;
   s3SecretKey?: string;
+  s3SessionToken?: string;
   s3Bucket?: string;
+  s3ForcePathStyle: boolean;
   metricsPort: number;
   heartbeatInterval: number;
   heartbeatMaxRetries: number;
