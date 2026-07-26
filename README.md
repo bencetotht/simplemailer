@@ -9,6 +9,9 @@ The project is under active stabilization. It is suitable for development and ev
 - `apps/dashboard`: Next.js dashboard and HTTP API
 - `apps/worker`: long-running RabbitMQ consumer and SMTP executor
 - `packages/database`: Prisma schema, client, and migrations
+- `packages/contracts`: shared `/v1` runtime validators, types, and OpenAPI schemas
+- `packages/sdk`: ESM-only, server-side TypeScript SDK and declarative sync engine
+- `packages/cli`: JSON/YAML manifest validation, diff, and sync commands
 - PostgreSQL: configuration, bulk schedules, delivery state, and worker heartbeats
 - RabbitMQ: ready jobs, retry delivery, and dead letters
 - S3-compatible storage: intended durable home for MJML templates
@@ -105,11 +108,49 @@ stored. The initial `/v1/messages` slice accepts exactly one recipient and
 inline HTML with optional text. MJML and managed template versions remain
 planned Phase 2 work.
 
+TypeScript server applications can use the workspace SDK:
+
+```ts
+import { SimpleMailer } from "@simplemailer/sdk";
+
+const mailer = new SimpleMailer({
+  baseUrl: process.env.SIMPLEMAILER_URL!,
+  apiKey: process.env.SIMPLEMAILER_API_KEY!,
+});
+
+await mailer.messages.send(
+  {
+    sender: "transactional",
+    to: "person@example.com",
+    subject: "Welcome",
+    content: { html: "<p>Welcome</p>", text: "Welcome" },
+  },
+  { idempotencyKey: "welcome:user_123", retry: true },
+);
+```
+
+The SDK supports Node.js 22–24, validates requests and responses at runtime,
+accepts abort signals and timeouts, and never retries a `POST` without an
+idempotency key. It is not supported in browser bundles.
+
+Declarative JSON/YAML manifests can be checked locally:
+
+```bash
+pnpm --filter @simplemailer/cli exec simplemailer validate \
+  --config simplemailer.yaml
+```
+
+The `diff` and `sync` commands target the planned project-scoped sender and
+managed-template management endpoints. Until those Phase 2 endpoints land,
+local validation is usable but remote reconciliation is not.
+
 Legacy protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put
 either credential in a `NEXT_PUBLIC_*` environment variable.
 
-`apps/dashboard/lib/legacy-contract.ts` is the source of truth for the current
-OpenAPI document. Generate the checked-in artifact with:
+`@simplemailer/contracts` owns shared `/v1` validators and JSON schemas.
+`apps/dashboard/lib/legacy-contract.ts` composes those with the compatibility
+API to produce the current OpenAPI document. Generate the checked-in artifact
+with:
 
 ```bash
 pnpm --filter dashboard openapi:generate

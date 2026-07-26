@@ -842,7 +842,33 @@ Update:
 
 ## Phase 3 implementation notes
 
-Not started.
+In progress as of 2026-07-26:
+
+- Added publishable ESM workspace packages for `@simplemailer/contracts`,
+  `@simplemailer/sdk`, and `@simplemailer/cli`, targeting Node.js 22–24 with
+  declaration/source-map output and strict TypeScript settings, including
+  `exactOptionalPropertyTypes`.
+- Moved the implemented `/v1/messages` request, response, status, and error
+  definitions into runtime Zod contracts. Dashboard validation, SDK types, and
+  generated OpenAPI schemas now consume those shared definitions.
+- Implemented the server-only SDK message client with configurable timeouts,
+  abort signals, injectable transports, an explicit user agent, validated
+  responses, structured errors, `Retry-After`, and bounded transient retries.
+  POST retries are disabled unless an idempotency key is present.
+- Added framework-free NestJS provider helpers and a stable injection token.
+  React and NestJS are not runtime dependencies.
+- Added typed `defineMailer` JSON/YAML resources, environment-variable secret
+  references, source-path resolution, stable alias-based diff plans, template
+  content digests, activation planning, non-destructive idempotent sync, and
+  redacted machine-readable output.
+- Added `simplemailer validate`, `diff`, and `sync`; validation is local, CI
+  diff uses meaningful exit codes, and remote-only resources are not deleted.
+  Unit tests cover HTTP behavior, fake transports, schema validation,
+  deterministic diffing, activation reuse, YAML loading, and redaction.
+- Project-scoped sender and managed-template management endpoints remain a
+  Phase 2 dependency. The SDK/CLI contract is in place, but remote `diff` and
+  `sync` cannot complete against the current server until those endpoints and
+  immutable template models are implemented.
 
 ---
 

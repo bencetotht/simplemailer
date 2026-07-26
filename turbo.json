@@ -19,7 +19,7 @@
       ]
     },
     "dev": {
-      "dependsOn": ["^db:generate"],
+      "dependsOn": ["^build", "^db:generate"],
       "cache": false,
       "persistent": true,
       "env": [
@@ -45,10 +45,10 @@
     },
     "lint": {},
     "type-check": {
-      "dependsOn": ["^db:generate"]
+      "dependsOn": ["^build", "^db:generate"]
     },
     "test": {
-      "dependsOn": ["^db:generate"],
+      "dependsOn": ["^build", "^db:generate"],
       "env": ["DATABASE_URL"]
     },
     "db:generate": {

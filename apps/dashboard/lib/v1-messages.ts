@@ -1,24 +1,13 @@
 import { createHash, randomUUID } from "crypto";
+import {
+  createInlineMessageSchema,
+  type ParsedCreateInlineMessage,
+} from "@simplemailer/contracts";
 import { ArtifactFormat, Prisma, SenderStatus, Status } from "database";
-import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { canonicalRequestDigest, isMateriallyDifferent } from "@/lib/idempotency";
 
-const tagValue = z.string().max(256);
-export const createInlineMessageSchema = z.object({
-  sender: z.string().trim().min(1).max(128),
-  to: z.string().email(),
-  subject: z.string().trim().min(1).max(998),
-  content: z.object({
-    html: z.string().min(1).max(512 * 1024),
-    text: z.string().max(512 * 1024).optional(),
-  }).strict(),
-  tags: z.record(tagValue).refine((tags) => Object.keys(tags).length <= 50, {
-    message: "At most 50 tags are allowed",
-  }).optional().default({}),
-}).strict();
-
-export type CreateInlineMessage = z.infer<typeof createInlineMessageSchema>;
+export { createInlineMessageSchema };
 
 export type AcceptMessageResult =
   | { kind: "accepted" | "replay"; message: MessageSummary }
@@ -85,7 +74,7 @@ const summaryInclude = { sender: { select: { alias: true } } } as const;
 
 export async function acceptInlineMessage(input: {
   projectId: string;
-  body: CreateInlineMessage;
+  body: ParsedCreateInlineMessage;
   idempotencyKey: string | null;
   requestId: string;
   correlationId: string;
