@@ -1504,15 +1504,9 @@
     "schemas": {
       "ErrorResponse": {
         "type": "object",
-        "additionalProperties": true,
-        "required": [
-          "success",
-          "code",
-          "message",
-          "requestId"
-        ],
         "properties": {
           "success": {
+            "type": "boolean",
             "const": false
           },
           "code": {
@@ -1524,15 +1518,15 @@
           "requestId": {
             "type": "string"
           },
-          "details": {},
-          "error": {
-            "type": "string",
-            "description": "Temporary legacy alias for message"
-          },
-          "fields": {
-            "description": "Temporary legacy alias for validation details"
-          }
-        }
+          "details": {}
+        },
+        "required": [
+          "success",
+          "code",
+          "message",
+          "requestId"
+        ],
+        "additionalProperties": true
       },
       "SuccessResponse": {
         "type": "object",
@@ -1598,13 +1592,6 @@
       },
       "CreateInlineMessageRequest": {
         "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "sender",
-          "to",
-          "subject",
-          "content"
-        ],
         "properties": {
           "sender": {
             "type": "string",
@@ -1622,10 +1609,6 @@
           },
           "content": {
             "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "html"
-            ],
             "properties": {
               "html": {
                 "type": "string",
@@ -1636,38 +1619,35 @@
                 "type": "string",
                 "maxLength": 524288
               }
-            }
+            },
+            "required": [
+              "html"
+            ],
+            "additionalProperties": false
           },
           "tags": {
             "type": "object",
-            "maxProperties": 50,
             "additionalProperties": {
               "type": "string",
               "maxLength": 256
-            }
+            },
+            "default": {}
           }
-        }
-      },
-      "MessageSummary": {
-        "type": "object",
-        "additionalProperties": false,
+        },
         "required": [
-          "id",
-          "status",
           "sender",
           "to",
           "subject",
-          "tags",
-          "acceptedAt",
-          "queuedAt",
-          "completedAt",
-          "failureClass",
-          "lastError"
+          "content"
         ],
+        "additionalProperties": false
+      },
+      "MessageSummary": {
+        "type": "object",
         "properties": {
           "id": {
             "type": "string",
-            "pattern": "^msg_"
+            "pattern": "^msg\\_"
           },
           "status": {
             "type": "string",
@@ -1704,18 +1684,26 @@
             "format": "date-time"
           },
           "queuedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "completedAt": {
-            "type": [
-              "string",
-              "null"
-            ],
-            "format": "date-time"
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "failureClass": {
             "type": [
@@ -1729,19 +1717,121 @@
               "null"
             ]
           }
-        }
+        },
+        "required": [
+          "id",
+          "status",
+          "sender",
+          "to",
+          "subject",
+          "tags",
+          "acceptedAt",
+          "queuedAt",
+          "completedAt",
+          "failureClass",
+          "lastError"
+        ],
+        "additionalProperties": false
       },
       "MessageResponse": {
         "type": "object",
-        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "string",
+                "pattern": "^msg\\_"
+              },
+              "status": {
+                "type": "string",
+                "enum": [
+                  "ENQUEUE_PENDING",
+                  "QUEUED",
+                  "PROCESSING",
+                  "PENDING",
+                  "SENT",
+                  "FAILED",
+                  "RETRYING",
+                  "DEAD",
+                  "DELIVERY_UNCERTAIN"
+                ]
+              },
+              "sender": {
+                "type": "string"
+              },
+              "to": {
+                "type": "string",
+                "format": "email"
+              },
+              "subject": {
+                "type": "string"
+              },
+              "tags": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "acceptedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "queuedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "completedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "failureClass": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "lastError": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "id",
+              "status",
+              "sender",
+              "to",
+              "subject",
+              "tags",
+              "acceptedAt",
+              "queuedAt",
+              "completedAt",
+              "failureClass",
+              "lastError"
+            ],
+            "additionalProperties": false
+          }
+        },
         "required": [
           "data"
         ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/MessageSummary"
-          }
-        }
+        "additionalProperties": false
       },
       "SendAcceptedResponse": {
         "type": "object",

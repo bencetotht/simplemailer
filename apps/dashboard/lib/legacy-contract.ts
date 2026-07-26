@@ -1,19 +1,13 @@
-import type { Status } from "database";
+import {
+  MAX_IDEMPOTENCY_KEY_LENGTH,
+  MESSAGE_STATUS_VALUES,
+  publicJsonSchemas,
+} from "@simplemailer/contracts";
 
 export const LEGACY_API_KEY_HEADER = "x-api-key";
 export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
-export const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
-export const LEGACY_STATUS_VALUES = [
-  "ENQUEUE_PENDING",
-  "QUEUED",
-  "PROCESSING",
-  "PENDING",
-  "SENT",
-  "FAILED",
-  "RETRYING",
-  "DEAD",
-  "DELIVERY_UNCERTAIN",
-] as const satisfies readonly Status[];
+export { MAX_IDEMPOTENCY_KEY_LENGTH };
+export const LEGACY_STATUS_VALUES = MESSAGE_STATUS_VALUES;
 
 const json = (schema: Record<string, unknown>) => ({
   "application/json": { schema },
@@ -406,20 +400,7 @@ export const openApiDocument = {
       },
     },
     schemas: {
-      ErrorResponse: {
-        type: "object",
-        additionalProperties: true,
-        required: ["success", "code", "message", "requestId"],
-        properties: {
-          success: { const: false },
-          code: { type: "string" },
-          message: { type: "string" },
-          requestId: { type: "string" },
-          details: {},
-          error: { type: "string", description: "Temporary legacy alias for message" },
-          fields: { description: "Temporary legacy alias for validation details" },
-        },
-      },
+      ErrorResponse: publicJsonSchemas.ApiError,
       SuccessResponse: {
         type: "object",
         required: ["success"],
@@ -449,66 +430,9 @@ export const openApiDocument = {
           values: { type: "object", additionalProperties: true },
         },
       },
-      CreateInlineMessageRequest: {
-        type: "object",
-        additionalProperties: false,
-        required: ["sender", "to", "subject", "content"],
-        properties: {
-          sender: { type: "string", minLength: 1, maxLength: 128 },
-          to: { type: "string", format: "email" },
-          subject: { type: "string", minLength: 1, maxLength: 998 },
-          content: {
-            type: "object",
-            additionalProperties: false,
-            required: ["html"],
-            properties: {
-              html: { type: "string", minLength: 1, maxLength: 524288 },
-              text: { type: "string", maxLength: 524288 },
-            },
-          },
-          tags: {
-            type: "object",
-            maxProperties: 50,
-            additionalProperties: { type: "string", maxLength: 256 },
-          },
-        },
-      },
-      MessageSummary: {
-        type: "object",
-        additionalProperties: false,
-        required: [
-          "id",
-          "status",
-          "sender",
-          "to",
-          "subject",
-          "tags",
-          "acceptedAt",
-          "queuedAt",
-          "completedAt",
-          "failureClass",
-          "lastError",
-        ],
-        properties: {
-          id: { type: "string", pattern: "^msg_" },
-          status: statusSchema,
-          sender: { type: "string" },
-          to: { type: "string", format: "email" },
-          subject: { type: "string" },
-          tags: { type: "object", additionalProperties: { type: "string" } },
-          acceptedAt: { type: "string", format: "date-time" },
-          queuedAt: { type: ["string", "null"], format: "date-time" },
-          completedAt: { type: ["string", "null"], format: "date-time" },
-          failureClass: { type: ["string", "null"] },
-          lastError: { type: ["string", "null"] },
-        },
-      },
-      MessageResponse: {
-        type: "object",
-        additionalProperties: false,
-        required: ["data"],
-        properties: { data: ref("MessageSummary") },
-      },
+      CreateInlineMessageRequest: publicJsonSchemas.CreateInlineMessageRequest,
+      MessageSummary: publicJsonSchemas.MessageSummary,
+      MessageResponse: publicJsonSchemas.MessageResponse,
       SendAcceptedResponse: {
         type: "object",
         additionalProperties: false,
