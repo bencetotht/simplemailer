@@ -21,7 +21,7 @@ vi.mock('./template', () => ({
   compileTemplate: mocks.compileTemplate,
 }));
 
-import { sendMail } from './mail';
+import { sendImmutableMail, sendMail } from './mail';
 
 const account = {
   username: 'sender@example.com',
@@ -96,5 +96,30 @@ describe('sendMail delivery boundary', () => {
     ).rejects.toBeInstanceOf(RetryableMailError);
     expect(callback).toHaveBeenCalledOnce();
     expect(mocks.sendMail).toHaveBeenCalledOnce();
+  });
+
+  test('sends a persisted immutable snapshot without compiling a template', async () => {
+    await sendImmutableMail(
+      account,
+      {
+        recipient: 'reader@example.com',
+        resolvedFrom: 'SimpleMailer <sender@example.com>',
+        resolvedReplyTo: 'support@example.com',
+        subject: 'Persisted subject',
+        html: '<p>Persisted HTML</p>',
+        text: 'Persisted text',
+      },
+      config,
+    );
+
+    expect(mocks.compileTemplate).not.toHaveBeenCalled();
+    expect(mocks.sendMail).toHaveBeenCalledWith({
+      from: 'SimpleMailer <sender@example.com>',
+      replyTo: 'support@example.com',
+      to: 'reader@example.com',
+      subject: 'Persisted subject',
+      html: '<p>Persisted HTML</p>',
+      text: 'Persisted text',
+    });
   });
 });

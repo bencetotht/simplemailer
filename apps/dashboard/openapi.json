@@ -1,8 +1,8 @@
 {
   "openapi": "3.1.0",
   "info": {
-    "title": "SimpleMailer legacy API",
-    "version": "2.1.0",
+    "title": "SimpleMailer API",
+    "version": "2.2.0",
     "description": "The current compatibility API. Server-to-server callers authenticate with x-api-key. Dashboard browsers use an HttpOnly session and a server-side proxy; the administrative API key is never exposed to JavaScript."
   },
   "servers": [
@@ -16,6 +16,9 @@
     }
   ],
   "tags": [
+    {
+      "name": "Messages"
+    },
     {
       "name": "Mail"
     },
@@ -36,6 +39,193 @@
     }
   ],
   "paths": {
+    "/v1/messages": {
+      "post": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Accept an immutable inline message",
+        "description": "Initial Phase 2 endpoint. Exactly one recipient and inline HTML with optional text are currently supported.",
+        "security": [
+          {
+            "ProjectBearerKey": [
+              "messages:send"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Makes a mutation replay-safe. Reuse with materially different content returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateInlineMessageRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Message accepted or idempotently replayed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, revoked, or inactive project key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Project key lacks messages:send",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Active sender alias not found in the authenticated project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was used with materially different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Message persisted enqueue-pending after publication failed",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/messages/{id}": {
+      "get": {
+        "tags": [
+          "Messages"
+        ],
+        "summary": "Retrieve project-scoped message status",
+        "security": [
+          {
+            "ProjectBearerKey": [
+              "messages:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Message status without body content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing, invalid, expired, revoked, or inactive project key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Project key lacks messages:read",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Message not found in the authenticated project",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/health": {
       "get": {
         "tags": [
@@ -1303,6 +1493,12 @@
         "in": "header",
         "name": "x-api-key",
         "description": "Temporary server-to-server administrative credential."
+      },
+      "ProjectBearerKey": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "SimpleMailer project API key",
+        "description": "Hashed, revocable project credential with explicit scopes."
       }
     },
     "schemas": {
@@ -1397,6 +1593,153 @@
           "values": {
             "type": "object",
             "additionalProperties": true
+          }
+        }
+      },
+      "CreateInlineMessageRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "sender",
+          "to",
+          "subject",
+          "content"
+        ],
+        "properties": {
+          "sender": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "to": {
+            "type": "string",
+            "format": "email"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 998
+          },
+          "content": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "html"
+            ],
+            "properties": {
+              "html": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 524288
+              },
+              "text": {
+                "type": "string",
+                "maxLength": 524288
+              }
+            }
+          },
+          "tags": {
+            "type": "object",
+            "maxProperties": 50,
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 256
+            }
+          }
+        }
+      },
+      "MessageSummary": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "status",
+          "sender",
+          "to",
+          "subject",
+          "tags",
+          "acceptedAt",
+          "queuedAt",
+          "completedAt",
+          "failureClass",
+          "lastError"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^msg_"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENQUEUE_PENDING",
+              "QUEUED",
+              "PROCESSING",
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING",
+              "DEAD",
+              "DELIVERY_UNCERTAIN"
+            ]
+          },
+          "sender": {
+            "type": "string"
+          },
+          "to": {
+            "type": "string",
+            "format": "email"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "queuedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "completedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "failureClass": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/MessageSummary"
           }
         }
       },

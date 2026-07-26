@@ -5,22 +5,27 @@ import type { S3Client } from '@aws-sdk/client-s3';
 import { CircuitBreaker } from './circuit-breaker';
 import {
   claimLogForProcessing,
+  claimMessageForProcessing,
   createLog,
   findLogById,
   getCredentials,
+  getImmutableMessage,
   getTemplate,
   markDeliveryAttemptFailed,
   markDeliveryAttemptStarted,
+  markMessageDeliveryFailed,
+  markMessageDeliveryStarted,
+  updateMessageStatus,
   updateLogStatus,
   validateAccount,
   validateTemplate,
 } from './db';
 import { CircuitOpenError, PermanentMailError, RetryableMailError, ValueError } from './errors';
 import { logRedactedError } from './log';
-import { sendMail } from './mail';
+import { sendImmutableMail, sendMail } from './mail';
 import { publishDeadLetter, publishRetry } from './queue';
 import type { Metrics } from './metrics';
-import type { MailJob, QueueMessage, QueueMessageV2, WorkerConfig } from './types';
+import type { MailJob, QueueMessage, QueueMessageV2, QueueMessageV3, WorkerConfig } from './types';
 
 interface ConsumerDeps {
   config: WorkerConfig;
@@ -37,7 +42,7 @@ function toQueueMessageV2(
     return parsed as QueueMessageV2;
   }
 
-  const data = parsed?.data;
+  const data = 'data' in parsed ? parsed.data : null;
   if (!data) return null;
 
   const headers = (msg.properties.headers ?? {}) as Record<string, unknown>;
@@ -49,6 +54,14 @@ function toQueueMessageV2(
     correlationId: String(msg.properties.correlationId ?? headers.correlationId ?? randomUUID()),
     data,
   };
+}
+
+function isQueueMessageV3(parsed: QueueMessage): parsed is QueueMessageV3 {
+  const candidate = parsed as QueueMessageV3;
+  return candidate.version === 3 &&
+    typeof candidate.messageId === 'string' &&
+    Number.isInteger(candidate.attempt) &&
+    typeof candidate.correlationId === 'string';
 }
 
 function isValidMailJob(data: MailJob): boolean {
@@ -151,6 +164,11 @@ async function handleMessage(
     parsed = JSON.parse(msg.content.toString()) as QueueMessage;
   } catch {
     await deadLetterMalformedMessage(channel, msg, 'Invalid JSON', config.publishConfirmTimeoutMs);
+    return;
+  }
+
+  if (isQueueMessageV3(parsed)) {
+    await handleImmutableMessage(parsed, msg, channel, config, metrics, breaker);
     return;
   }
 
@@ -323,6 +341,171 @@ async function handleMessage(
     } catch (publishErr) {
       logRedactedError('consumer.deadletter_publish_failed', publishErr, {
         logId: logEntry.id,
+        attempt: queueMessage.attempt,
+      });
+      channel.nack(msg, false, true);
+    }
+  }
+}
+
+async function handleImmutableMessage(
+  queueMessage: QueueMessageV3,
+  msg: ConsumeMessage,
+  channel: ConfirmChannel,
+  config: WorkerConfig,
+  metrics: Metrics,
+  breaker: CircuitBreaker,
+): Promise<void> {
+  let message;
+  try {
+    message = await getImmutableMessage(queueMessage.messageId);
+  } catch (error) {
+    const reason = error instanceof Error ? error.message : String(error);
+    await deadLetterMalformedMessage(
+      channel,
+      msg,
+      `Immutable message load failed: ${reason}`,
+      config.publishConfirmTimeoutMs,
+    );
+    return;
+  }
+
+  if (
+    message.status === Status.SENT ||
+    message.status === Status.FAILED ||
+    message.status === Status.DEAD ||
+    message.status === Status.DELIVERY_UNCERTAIN
+  ) {
+    channel.ack(msg);
+    return;
+  }
+
+  const claimed = await claimMessageForProcessing(
+    message.id,
+    config.workerId,
+    config.processingLeaseMs,
+  );
+  if (!claimed) {
+    channel.ack(msg);
+    return;
+  }
+
+  let breakerKey: string | null = null;
+  let smtpAccepted = false;
+  try {
+    const account = await getCredentials(message.accountId);
+    breakerKey = `${message.accountId}:${account.emailHost}`;
+    const attemptState = breaker.canAttempt(breakerKey);
+    if (!attemptState.allowed) {
+      throw new CircuitOpenError(attemptState.reason ?? 'circuit-open');
+    }
+
+    await sendImmutableMail(account, message, config, async () => {
+      const deliveryStarted = await markMessageDeliveryStarted(message.id, config.workerId);
+      if (!deliveryStarted) {
+        throw new RetryableMailError('Processing lease expired before SMTP delivery began');
+      }
+    });
+    smtpAccepted = true;
+    breaker.recordSuccess(breakerKey);
+    metrics.setOpenCircuits(breaker.getOpenCircuits());
+    metrics.processedTotal.inc();
+    await updateMessageStatus(message.id, Status.SENT, {
+      processingOwner: config.workerId,
+      lastError: null,
+      failureClass: null,
+      nextAttemptAt: null,
+      lastAttemptAt: new Date(),
+    });
+    channel.ack(msg);
+    return;
+  } catch (error) {
+    if (smtpAccepted) {
+      logRedactedError('consumer.v3.smtp_accepted_status_persist_failed', error, {
+        messageId: message.id,
+        workerId: config.workerId,
+      });
+      channel.nack(msg, false, true);
+      return;
+    }
+    await markMessageDeliveryFailed(message.id, config.workerId);
+    if (breakerKey && (error instanceof RetryableMailError || error instanceof CircuitOpenError)) {
+      breaker.recordRetryableFailure(breakerKey);
+    }
+    metrics.setOpenCircuits(breaker.getOpenCircuits());
+
+    const err = error instanceof Error ? error : new Error(String(error));
+    const retryable = err instanceof RetryableMailError || err instanceof CircuitOpenError;
+    if (retryable) {
+      const nextAttempt = queueMessage.attempt + 1;
+      const delayMs = getRetryDelayMs(nextAttempt);
+      const retryPayload: QueueMessageV3 = { ...queueMessage, attempt: nextAttempt };
+      if (nextAttempt <= config.maxRetries) {
+        try {
+          await publishRetry(
+            channel,
+            retryPayload,
+            {
+              version: 3,
+              retryCount: nextAttempt,
+              messageId: message.id,
+              correlationId: queueMessage.correlationId,
+              failureClass: err.name,
+              failureReason: err.message,
+              failedAt: new Date().toISOString(),
+            },
+            delayMs,
+            config.publishConfirmTimeoutMs,
+          );
+          await updateMessageStatus(message.id, Status.RETRYING, {
+            processingOwner: config.workerId,
+            retryCount: nextAttempt,
+            lastError: err.message,
+            failureClass: err.name,
+            nextAttemptAt: new Date(Date.now() + delayMs),
+            lastAttemptAt: new Date(),
+          });
+          channel.ack(msg);
+        } catch (publishError) {
+          logRedactedError('consumer.v3.retry_publish_failed', publishError, {
+            messageId: message.id,
+            attempt: nextAttempt,
+          });
+          channel.nack(msg, false, true);
+        }
+        return;
+      }
+    }
+
+    try {
+      await publishDeadLetter(
+        channel,
+        queueMessage,
+        {
+          version: 3,
+          retryCount: queueMessage.attempt,
+          messageId: message.id,
+          correlationId: queueMessage.correlationId,
+          failureClass: err.name,
+          failureReason: err.message,
+          failedAt: new Date().toISOString(),
+        },
+        config.publishConfirmTimeoutMs,
+      );
+      const terminalStatus =
+        err instanceof PermanentMailError || err instanceof ValueError ? Status.FAILED : Status.DEAD;
+      await updateMessageStatus(message.id, terminalStatus, {
+        processingOwner: config.workerId,
+        retryCount: queueMessage.attempt,
+        lastError: err.message,
+        failureClass: err.name,
+        nextAttemptAt: null,
+        lastAttemptAt: new Date(),
+      });
+      channel.ack(msg);
+    } catch (publishError) {
+      logRedactedError('consumer.v3.deadletter_publish_failed', publishError, {
+        messageId: message.id,
         attempt: queueMessage.attempt,
       });
       channel.nack(msg, false, true);

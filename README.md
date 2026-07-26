@@ -80,12 +80,33 @@ MinIO and other S3-compatible services are supported by setting `S3_ENDPOINT` an
 
 OpenAPI documentation is served at `/api/docs`. Important endpoints include:
 
+- `POST /v1/messages` and `GET /v1/messages/{id}` for project-scoped immutable
+  inline messages
 - `POST /api/send` for one message
 - `POST /api/send/bulk` and `GET /api/send/bulk/{id}` for paced batches
 - `/api/account`, `/api/template`, and `/api/bucket` for configuration
 - `/api/logs`, `/api/jobs`, and `/api/workers` for operational state
 
-Protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put this service credential in a `NEXT_PUBLIC_*` environment variable.
+The `/v1` endpoints expect a scoped project credential in
+`Authorization: Bearer <key>`. Bootstrap the first project and key from the
+trusted deployment environment. An optional sender alias can be linked to an
+existing SMTP account in the same command:
+
+```bash
+SIMPLEMAILER_PROJECT_SLUG=my-app \
+SIMPLEMAILER_PROJECT_NAME="My app" \
+SIMPLEMAILER_SENDER_ALIAS=transactional \
+SIMPLEMAILER_ACCOUNT_ID=<existing-account-id> \
+pnpm --filter dashboard project:bootstrap
+```
+
+The full project key is printed once; only its prefix and scrypt hash are
+stored. The initial `/v1/messages` slice accepts exactly one recipient and
+inline HTML with optional text. MJML and managed template versions remain
+planned Phase 2 work.
+
+Legacy protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put
+either credential in a `NEXT_PUBLIC_*` environment variable.
 
 `apps/dashboard/lib/legacy-contract.ts` is the source of truth for the current
 OpenAPI document. Generate the checked-in artifact with:

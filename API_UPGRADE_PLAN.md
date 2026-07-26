@@ -637,7 +637,37 @@ specific retention requirement.
 
 ## Phase 2 implementation notes
 
-Not started.
+In progress as of 2026-07-26:
+
+- Added additive `Project`, hashed/scoped `ApiKey`, project-scoped `Sender`,
+  deduplicated `ContentArtifact`, and immutable `Message` models with a
+  forward-only migration. The complete migration history applies successfully
+  to a fresh PostgreSQL 17 database.
+- Added a trusted bootstrap command that creates a project and 256-bit API key,
+  prints the full secret once, and can optionally map a sender alias to an
+  existing encrypted SMTP account. Keys use a non-secret lookup prefix,
+  randomly salted scrypt hashes, constant-time hash comparison, scopes,
+  expiry/revocation checks, project suspension checks, and last-used tracking.
+- Added the first `/v1/messages` vertical slice: project Bearer authentication,
+  `messages:send`/`messages:read` authorization, one-recipient inline HTML/text
+  acceptance, project-scoped sender resolution and idempotency, artifact
+  deduplication, immutable resolved envelope/content persistence,
+  `POST /v1/messages`, and `GET /v1/messages/{id}` without body retrieval.
+- Added queue payload version 3 and worker compatibility. The worker loads the
+  persisted message snapshot by ID, loads sender credentials separately, never
+  renders mutable template data for v3 messages, and preserves the existing
+  processing-lease, retry, dead-letter, and delivery-uncertainty behavior.
+  Enqueue reconciliation also covers persisted v3 messages after publication
+  failure.
+- OpenAPI now documents the initial scoped message surface and its Bearer
+  scopes. Tests cover key generation/hash verification, request validation,
+  project propagation, idempotent replay publication behavior, and delivery
+  from persisted content. `pnpm type-check`, `pnpm lint`, `pnpm test`, and
+  `pnpm build` pass.
+- Still pending in Phase 2: object-store artifact spillover, MJML compiler
+  safety, managed template aliases/versions and variable schemas, message
+  listing, legacy-route convergence, project-scoped bulk orchestration,
+  management endpoints/rotation workflows, and broader boundary/race tests.
 
 ---
 

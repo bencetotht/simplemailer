@@ -1,9 +1,16 @@
 import { prisma } from 'database';
-import type { Account, Log, Template } from 'database';
+import type { Account, Log, Message, Template } from 'database';
 import { Status } from 'database';
 import type { MailJob } from './types';
 import { ValueError } from './errors';
 import { decryptSecret } from './secrets';
+
+const MESSAGE_TERMINAL_STATUSES = [
+  Status.SENT,
+  Status.FAILED,
+  Status.DEAD,
+  Status.DELIVERY_UNCERTAIN,
+] as const;
 
 export async function createLog(
   data: MailJob,
@@ -227,6 +234,114 @@ export async function getCredentials(accountId: string): Promise<AccountCredenti
   };
 }
 
+export async function getImmutableMessage(messageId: string) {
+  const message = await prisma.message.findUnique({
+    where: { id: messageId },
+    include: {
+      sender: { select: { accountId: true } },
+      htmlArtifact: { select: { content: true } },
+      textArtifact: { select: { content: true } },
+    },
+  });
+  if (!message) throw new ValueError(`Message ${messageId} not found`);
+  if (!message.htmlArtifact.content) {
+    throw new ValueError(`Message ${messageId} HTML artifact content is unavailable`);
+  }
+  return {
+    ...message,
+    accountId: message.sender.accountId,
+    html: message.htmlArtifact.content,
+    text: message.textArtifact?.content ?? null,
+  };
+}
+
+export async function claimMessageForProcessing(
+  id: string,
+  processingOwner: string,
+  leaseMs: number,
+): Promise<boolean> {
+  const now = new Date();
+  const result = await prisma.message.updateMany({
+    where: {
+      id,
+      OR: [
+        { status: { in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.RETRYING, Status.PENDING] } },
+        {
+          status: Status.PROCESSING,
+          processingLeaseExpiresAt: { lte: now },
+          deliveryAttemptStartedAt: null,
+        },
+      ],
+    },
+    data: {
+      status: Status.PROCESSING,
+      lastAttemptAt: now,
+      processingOwner,
+      processingLeaseExpiresAt: new Date(now.getTime() + leaseMs),
+      deliveryAttemptStartedAt: null,
+    },
+  });
+  return result.count > 0;
+}
+
+export async function markMessageDeliveryStarted(
+  id: string,
+  processingOwner: string,
+): Promise<boolean> {
+  const result = await prisma.message.updateMany({
+    where: {
+      id,
+      status: Status.PROCESSING,
+      processingOwner,
+      processingLeaseExpiresAt: { gt: new Date() },
+    },
+    data: { deliveryAttemptStartedAt: new Date() },
+  });
+  return result.count > 0;
+}
+
+export async function markMessageDeliveryFailed(
+  id: string,
+  processingOwner: string,
+): Promise<void> {
+  await prisma.message.updateMany({
+    where: { id, status: Status.PROCESSING, processingOwner },
+    data: { deliveryAttemptStartedAt: null },
+  });
+}
+
+export async function updateMessageStatus(
+  id: string,
+  status: Status,
+  opts: {
+    processingOwner: string;
+    retryCount?: number;
+    lastError?: string | null;
+    failureClass?: string | null;
+    nextAttemptAt?: Date | null;
+    lastAttemptAt?: Date | null;
+  },
+) {
+  const terminal = MESSAGE_TERMINAL_STATUSES.includes(status as typeof MESSAGE_TERMINAL_STATUSES[number]);
+  const result = await prisma.message.updateMany({
+    where: { id, processingOwner: opts.processingOwner },
+    data: {
+      status,
+      ...(opts.retryCount !== undefined && { retryCount: opts.retryCount }),
+      ...(opts.lastError !== undefined && { lastError: opts.lastError }),
+      ...(opts.failureClass !== undefined && { failureClass: opts.failureClass }),
+      ...(opts.nextAttemptAt !== undefined && { nextAttemptAt: opts.nextAttemptAt }),
+      ...(opts.lastAttemptAt !== undefined && { lastAttemptAt: opts.lastAttemptAt }),
+      ...(terminal && { completedAt: new Date() }),
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
+    },
+  });
+  if (result.count === 0) {
+    throw new ValueError(`Processing lease for message ${id} is no longer owned by this worker`);
+  }
+}
+
 export async function getTemplate(templateId: string): Promise<Template> {
   const template = await prisma.template.findUnique({ where: { id: templateId } });
   if (!template) throw new ValueError(`Template ${templateId} not found`);
@@ -308,6 +423,96 @@ export async function releaseEnqueueClaim(
       failureClass: 'RECONCILE_PUBLISH_FAILED',
     },
   });
+}
+
+export async function claimDueMessages(limit = 50, olderThanMs = 10_000) {
+  const threshold = new Date(Date.now() - olderThanMs);
+  return prisma.$transaction(async (tx) => {
+    const rows = await tx.$queryRaw<Message[]>`
+      SELECT *
+      FROM "public"."Message"
+      WHERE "status" = 'ENQUEUE_PENDING'::"public"."Status"
+        AND "updatedAt" <= ${threshold}
+      ORDER BY "createdAt" ASC
+      LIMIT ${limit}
+      FOR UPDATE SKIP LOCKED
+    `;
+    if (rows.length === 0) return [];
+    await tx.message.updateMany({
+      where: { id: { in: rows.map((row) => row.id) }, status: Status.ENQUEUE_PENDING },
+      data: { status: Status.PENDING },
+    });
+    return rows.map((row) => ({ ...row, status: Status.PENDING }));
+  });
+}
+
+export async function releaseStaleMessageClaims(olderThanMs = 60_000): Promise<number> {
+  const result = await prisma.message.updateMany({
+    where: { status: Status.PENDING, updatedAt: { lte: new Date(Date.now() - olderThanMs) } },
+    data: { status: Status.ENQUEUE_PENDING },
+  });
+  return result.count;
+}
+
+export async function markMessageQueuedAfterPublish(id: string): Promise<void> {
+  await prisma.message.updateMany({
+    where: { id, status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] } },
+    data: {
+      status: Status.QUEUED,
+      queuedAt: new Date(),
+      lastAttemptAt: new Date(),
+      failureClass: null,
+      lastError: null,
+    },
+  });
+}
+
+export async function releaseMessageEnqueueClaim(id: string, error: unknown): Promise<void> {
+  await prisma.message.updateMany({
+    where: { id, status: Status.PENDING },
+    data: {
+      status: Status.ENQUEUE_PENDING,
+      lastError: error instanceof Error ? error.message : String(error),
+      failureClass: 'RECONCILE_PUBLISH_FAILED',
+    },
+  });
+}
+
+export async function recoverExpiredMessageLeases(): Promise<{
+  requeued: number;
+  uncertain: number;
+}> {
+  const now = new Date();
+  const uncertain = await prisma.message.updateMany({
+    where: {
+      status: Status.PROCESSING,
+      processingLeaseExpiresAt: { lte: now },
+      deliveryAttemptStartedAt: { not: null },
+    },
+    data: {
+      status: Status.DELIVERY_UNCERTAIN,
+      completedAt: now,
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
+      failureClass: 'WORKER_LOST_DURING_SMTP_DELIVERY',
+      lastError: 'Worker lease expired after SMTP delivery began; automatic retry suppressed',
+    },
+  });
+  const requeued = await prisma.message.updateMany({
+    where: {
+      status: Status.PROCESSING,
+      processingLeaseExpiresAt: { lte: now },
+      deliveryAttemptStartedAt: null,
+    },
+    data: {
+      status: Status.ENQUEUE_PENDING,
+      processingOwner: null,
+      processingLeaseExpiresAt: null,
+      failureClass: 'PROCESSING_LEASE_EXPIRED',
+      lastError: 'Worker lease expired before SMTP delivery began; message requeued',
+    },
+  });
+  return { requeued: requeued.count, uncertain: uncertain.count };
 }
 
 export async function getMetrics(): Promise<{

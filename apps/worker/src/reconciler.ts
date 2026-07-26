@@ -2,13 +2,18 @@ import { randomUUID } from 'crypto';
 import type { ConfirmChannel } from 'amqplib';
 import {
   claimDueEnqueuePending,
+  claimDueMessages,
+  markMessageQueuedAfterPublish,
   markQueuedAfterPublish,
   releaseEnqueueClaim,
   recoverExpiredProcessingLeases,
+  recoverExpiredMessageLeases,
+  releaseMessageEnqueueClaim,
+  releaseStaleMessageClaims,
   releaseStaleEnqueueClaims,
 } from './db';
 import { publishMain } from './queue';
-import type { MailJob, QueueMessageV2, WorkerConfig } from './types';
+import type { MailJob, QueueMessageV2, QueueMessageV3, WorkerConfig } from './types';
 
 const DUE_ENQUEUE_CHUNK_SIZE = 50;
 
@@ -37,12 +42,19 @@ export function startEnqueueReconciler(
 
     try {
       const recovered = await recoverExpiredProcessingLeases();
+      const recoveredMessages = await recoverExpiredMessageLeases();
       if (recovered.requeued > 0 || recovered.uncertain > 0) {
         console.warn(
           `[reconciler] Recovered expired processing leases: requeued=${recovered.requeued} uncertain=${recovered.uncertain}`,
         );
       }
+      if (recoveredMessages.requeued > 0 || recoveredMessages.uncertain > 0) {
+        console.warn(
+          `[reconciler] Recovered expired message leases: requeued=${recoveredMessages.requeued} uncertain=${recoveredMessages.uncertain}`,
+        );
+      }
       await releaseStaleEnqueueClaims();
+      await releaseStaleMessageClaims();
       const dueLogs = await claimDueEnqueuePending(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
       for (const log of dueLogs) {
         const data: MailJob = {
@@ -67,6 +79,26 @@ export function startEnqueueReconciler(
           await markQueuedAfterPublish(log.id);
         } catch (error) {
           await releaseEnqueueClaim(log.id, error);
+        }
+      }
+
+      const dueMessages = await claimDueMessages(DUE_ENQUEUE_CHUNK_SIZE, 10_000);
+      for (const messageRecord of dueMessages) {
+        const message: QueueMessageV3 = {
+          version: 3,
+          messageId: messageRecord.id,
+          attempt: 0,
+          correlationId: messageRecord.correlationId,
+        };
+        try {
+          await publishMain(channel, message, { source: 'enqueue-reconciler', version: 3 }, {
+            messageId: message.messageId,
+            correlationId: message.correlationId,
+            timeoutMs: config.publishConfirmTimeoutMs,
+          });
+          await markMessageQueuedAfterPublish(message.messageId);
+        } catch (error) {
+          await releaseMessageEnqueueClaim(message.messageId, error);
         }
       }
     } catch (error) {

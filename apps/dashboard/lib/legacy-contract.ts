@@ -49,14 +49,15 @@ const protectedSecurity = [{ LegacyApiKey: [] }];
 export const openApiDocument = {
   openapi: "3.1.0",
   info: {
-    title: "SimpleMailer legacy API",
-    version: "2.1.0",
+    title: "SimpleMailer API",
+    version: "2.2.0",
     description:
       "The current compatibility API. Server-to-server callers authenticate with x-api-key. Dashboard browsers use an HttpOnly session and a server-side proxy; the administrative API key is never exposed to JavaScript.",
   },
   servers: [{ url: "/" }],
   security: protectedSecurity,
   tags: [
+    { name: "Messages" },
     { name: "Mail" },
     { name: "Accounts" },
     { name: "Templates" },
@@ -65,6 +66,41 @@ export const openApiDocument = {
     { name: "System" },
   ],
   paths: {
+    "/v1/messages": {
+      post: {
+        tags: ["Messages"],
+        summary: "Accept an immutable inline message",
+        description:
+          "Initial Phase 2 endpoint. Exactly one recipient and inline HTML with optional text are currently supported.",
+        security: [{ ProjectBearerKey: ["messages:send"] }],
+        parameters: [idempotencyHeader],
+        requestBody: { required: true, content: json(ref("CreateInlineMessageRequest")) },
+        responses: {
+          "202": response("Message accepted or idempotently replayed", ref("MessageResponse")),
+          "400": standardErrors["400"],
+          "401": response("Missing, invalid, expired, revoked, or inactive project key"),
+          "403": response("Project key lacks messages:send"),
+          "404": response("Active sender alias not found in the authenticated project"),
+          "409": response("Idempotency key was used with materially different content"),
+          "413": standardErrors["413"],
+          "503": response("Message persisted enqueue-pending after publication failed"),
+        },
+      },
+    },
+    "/v1/messages/{id}": {
+      get: {
+        tags: ["Messages"],
+        summary: "Retrieve project-scoped message status",
+        security: [{ ProjectBearerKey: ["messages:read"] }],
+        parameters: [idParameter],
+        responses: {
+          "200": response("Message status without body content", ref("MessageResponse")),
+          "401": response("Missing, invalid, expired, revoked, or inactive project key"),
+          "403": response("Project key lacks messages:read"),
+          "404": response("Message not found in the authenticated project"),
+        },
+      },
+    },
     "/api/health": {
       get: {
         tags: ["System"],
@@ -362,6 +398,12 @@ export const openApiDocument = {
         name: LEGACY_API_KEY_HEADER,
         description: "Temporary server-to-server administrative credential.",
       },
+      ProjectBearerKey: {
+        type: "http",
+        scheme: "bearer",
+        bearerFormat: "SimpleMailer project API key",
+        description: "Hashed, revocable project credential with explicit scopes.",
+      },
     },
     schemas: {
       ErrorResponse: {
@@ -406,6 +448,66 @@ export const openApiDocument = {
           recipient: { type: "string", format: "email" },
           values: { type: "object", additionalProperties: true },
         },
+      },
+      CreateInlineMessageRequest: {
+        type: "object",
+        additionalProperties: false,
+        required: ["sender", "to", "subject", "content"],
+        properties: {
+          sender: { type: "string", minLength: 1, maxLength: 128 },
+          to: { type: "string", format: "email" },
+          subject: { type: "string", minLength: 1, maxLength: 998 },
+          content: {
+            type: "object",
+            additionalProperties: false,
+            required: ["html"],
+            properties: {
+              html: { type: "string", minLength: 1, maxLength: 524288 },
+              text: { type: "string", maxLength: 524288 },
+            },
+          },
+          tags: {
+            type: "object",
+            maxProperties: 50,
+            additionalProperties: { type: "string", maxLength: 256 },
+          },
+        },
+      },
+      MessageSummary: {
+        type: "object",
+        additionalProperties: false,
+        required: [
+          "id",
+          "status",
+          "sender",
+          "to",
+          "subject",
+          "tags",
+          "acceptedAt",
+          "queuedAt",
+          "completedAt",
+          "failureClass",
+          "lastError",
+        ],
+        properties: {
+          id: { type: "string", pattern: "^msg_" },
+          status: statusSchema,
+          sender: { type: "string" },
+          to: { type: "string", format: "email" },
+          subject: { type: "string" },
+          tags: { type: "object", additionalProperties: { type: "string" } },
+          acceptedAt: { type: "string", format: "date-time" },
+          queuedAt: { type: ["string", "null"], format: "date-time" },
+          completedAt: { type: ["string", "null"], format: "date-time" },
+          failureClass: { type: ["string", "null"] },
+          lastError: { type: ["string", "null"] },
+        },
+      },
+      MessageResponse: {
+        type: "object",
+        additionalProperties: false,
+        required: ["data"],
+        properties: { data: ref("MessageSummary") },
       },
       SendAcceptedResponse: {
         type: "object",
