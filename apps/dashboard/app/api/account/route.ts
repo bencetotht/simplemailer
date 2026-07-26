@@ -3,6 +3,7 @@ import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
 import { encryptSecret } from "@/lib/secrets";
 import { accountSchema } from "@/lib/validators";
+import { apiError, JSON_LIMITS, jsonResponse, readJsonBody } from "@/lib/http";
 
 /**
  * @swagger
@@ -90,13 +91,17 @@ export async function POST(request: NextRequest) {
   const unauthorized = requireApiKey(request);
   if (unauthorized) return unauthorized;
 
-  const body = await request.json();
-  const parsed = accountSchema.safeParse(body);
+  const body = await readJsonBody(request, JSON_LIMITS.controlPlane);
+  if (!body.ok) return body.response;
+  const parsed = accountSchema.safeParse(body.value);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 }
+    return apiError(
+      request,
+      400,
+      "VALIDATION_FAILED",
+      "Request validation failed",
+      { details: parsed.error.flatten().fieldErrors },
     );
   }
 
@@ -112,11 +117,13 @@ export async function POST(request: NextRequest) {
         password: null,
       },
     });
-    return NextResponse.json({ success: true, message: result.id });
+    return jsonResponse(request, { success: true, message: result.id });
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Failed to create account" },
-      { status: 500 }
+    return apiError(
+      request,
+      500,
+      "ACCOUNT_CREATE_FAILED",
+      "Failed to create account",
     );
   }
 }

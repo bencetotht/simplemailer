@@ -5,8 +5,16 @@ import { templateCreateSchema } from "@/lib/validators";
 import * as fs from "fs";
 import * as path from "path";
 import { deleteTemplate, putTemplate } from "@/lib/template-storage";
+import {
+  apiError,
+  JSON_LIMITS,
+  jsonResponse,
+  readJsonBody,
+  withTimeout,
+} from "@/lib/http";
 
 const TEMPLATES_DIR = path.join(process.cwd(), "../../templates");
+const TEMPLATE_STORAGE_TIMEOUT_MS = 10_000;
 
 /**
  * @swagger
@@ -41,13 +49,17 @@ export async function POST(request: NextRequest) {
   const unauthorized = requireApiKey(request);
   if (unauthorized) return unauthorized;
 
-  const body = await request.json();
-  const parsed = templateCreateSchema.safeParse(body);
+  const body = await readJsonBody(request, JSON_LIMITS.controlPlane);
+  if (!body.ok) return body.response;
+  const parsed = templateCreateSchema.safeParse(body.value);
 
   if (!parsed.success) {
-    return NextResponse.json(
-      { error: "Validation failed", fields: parsed.error.flatten().fieldErrors },
-      { status: 400 }
+    return apiError(
+      request,
+      400,
+      "VALIDATION_FAILED",
+      "Request validation failed",
+      { details: parsed.error.flatten().fieldErrors },
     );
   }
 
@@ -58,9 +70,11 @@ export async function POST(request: NextRequest) {
   const filename = `${slug}.mjml`;
 
   if (storageType === "LOCAL" && process.env.NODE_ENV === "production") {
-    return NextResponse.json(
-      { success: false, message: "LOCAL templates are development-only; use S3 storage" },
-      { status: 400 },
+    return apiError(
+      request,
+      400,
+      "LOCAL_STORAGE_DISABLED",
+      "LOCAL templates are development-only; use S3 storage",
     );
   }
 
@@ -69,26 +83,36 @@ export async function POST(request: NextRequest) {
       fs.mkdirSync(TEMPLATES_DIR, { recursive: true });
       const filePath = path.join(TEMPLATES_DIR, filename);
       if (fs.existsSync(filePath)) {
-        return NextResponse.json(
-          { success: false, message: `File ${filename} already exists` },
-          { status: 409 }
+        return apiError(
+          request,
+          409,
+          "TEMPLATE_ALREADY_EXISTS",
+          `File ${filename} already exists`,
         );
       }
       fs.writeFileSync(filePath, content, "utf8");
     } catch {
-      return NextResponse.json(
-        { success: false, message: "Failed to write template file" },
-        { status: 500 }
+      return apiError(
+        request,
+        500,
+        "TEMPLATE_STORAGE_FAILED",
+        "Failed to write template file",
       );
     }
   }
   if (storageType === "S3") {
     try {
-      await putTemplate(filename, content);
+      await withTimeout(
+        putTemplate(filename, content),
+        TEMPLATE_STORAGE_TIMEOUT_MS,
+        "template upload",
+      );
     } catch {
-      return NextResponse.json(
-        { success: false, message: "Failed to upload template" },
-        { status: 503 },
+      return apiError(
+        request,
+        503,
+        "TEMPLATE_STORAGE_UNAVAILABLE",
+        "Failed to upload template",
       );
     }
   }
@@ -97,18 +121,26 @@ export async function POST(request: NextRequest) {
     const result = await prisma.template.create({
       data: { name, subject, filename, storageType },
     });
-    return NextResponse.json({ success: true, message: result.id });
+    return jsonResponse(request, { success: true, message: result.id });
   } catch {
     // Roll back file write if DB fails
     if (storageType === "LOCAL") {
       try { fs.unlinkSync(path.join(TEMPLATES_DIR, filename)); } catch { /* ignore */ }
     }
     if (storageType === "S3") {
-      try { await deleteTemplate(filename); } catch { /* ignore orphan cleanup failure */ }
+      try {
+        await withTimeout(
+          deleteTemplate(filename),
+          TEMPLATE_STORAGE_TIMEOUT_MS,
+          "template cleanup",
+        );
+      } catch { /* ignore orphan cleanup failure */ }
     }
-    return NextResponse.json(
-      { success: false, message: "Failed to create template" },
-      { status: 500 }
+    return apiError(
+      request,
+      500,
+      "TEMPLATE_CREATE_FAILED",
+      "Failed to create template",
     );
   }
 }

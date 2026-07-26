@@ -1,61 +1,1380 @@
 {
-  "openapi": "3.0.0",
+  "openapi": "3.1.0",
   "info": {
-    "title": "SimpleMailer API",
-    "version": "2.0.0",
-    "description": "REST API for the SimpleMailer dashboard. Exposes SMTP account management, template management, S3 bucket configuration, job queue inspection, and mail dispatch."
+    "title": "SimpleMailer legacy API",
+    "version": "2.1.0",
+    "description": "The current compatibility API. Server-to-server callers authenticate with x-api-key. Dashboard browsers use an HttpOnly session and a server-side proxy; the administrative API key is never exposed to JavaScript."
   },
-  "tags": [
+  "servers": [
     {
-      "name": "System",
-      "description": "Health and status endpoints"
-    },
-    {
-      "name": "Mail",
-      "description": "Queue mail jobs"
-    },
-    {
-      "name": "Jobs",
-      "description": "Inspect the RabbitMQ mailer queue"
-    },
-    {
-      "name": "Logs",
-      "description": "Delivery log records"
-    },
-    {
-      "name": "Accounts",
-      "description": "SMTP account management"
-    },
-    {
-      "name": "Buckets",
-      "description": "S3 bucket configuration"
-    },
-    {
-      "name": "Templates",
-      "description": "Email template management"
+      "url": "/"
     }
   ],
+  "security": [
+    {
+      "LegacyApiKey": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "Mail"
+    },
+    {
+      "name": "Accounts"
+    },
+    {
+      "name": "Templates"
+    },
+    {
+      "name": "Buckets"
+    },
+    {
+      "name": "Operations"
+    },
+    {
+      "name": "System"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "tags": [
+          "System"
+        ],
+        "summary": "Health check",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "API process is running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send": {
+      "post": {
+        "tags": [
+          "Mail"
+        ],
+        "summary": "Accept and enqueue one mail job",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Makes a mutation replay-safe. Reuse with materially different content returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MailJobRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Job persisted and accepted for enqueue",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Referenced account or template does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was used with materially different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Process-local development rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until another request may be attempted",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "RabbitMQ publication failed; the persisted job remains enqueue-pending",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Mail"
+        ],
+        "summary": "Find a job by idempotency/enqueue key",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "enqueueKey",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Job status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SendStatusResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No job exists for the key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send/bulk": {
+      "post": {
+        "tags": [
+          "Mail"
+        ],
+        "summary": "Accept a paced bulk batch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Idempotency-Key",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 256
+            },
+            "description": "Makes a mutation replay-safe. Reuse with materially different content returns 409."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BulkSendRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Batch definition persisted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSendAcceptedResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Referenced account or template does not exist",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Idempotency key was used with materially different content",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Process-local development rate limit exceeded",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            },
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds until another request may be attempted",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/send/bulk/{id}": {
+      "get": {
+        "tags": [
+          "Mail"
+        ],
+        "summary": "Inspect a bulk batch and its recipient items",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "skip",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          },
+          {
+            "in": "query",
+            "name": "take",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "REJECTED",
+                "ENQUEUE_PENDING",
+                "QUEUED",
+                "PROCESSING",
+                "PENDING",
+                "SENT",
+                "FAILED",
+                "RETRYING",
+                "DEAD",
+                "DELIVERY_UNCERTAIN"
+              ]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bulk batch status",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/BulkSendBatchResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Batch not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account": {
+      "get": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "List SMTP accounts",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "id",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/AccountSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Create an SMTP account",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AccountRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Account created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/account/{id}": {
+      "delete": {
+        "tags": [
+          "Accounts"
+        ],
+        "summary": "Delete an SMTP account",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Account deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Account not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/template": {
+      "get": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "List templates",
+        "responses": {
+          "200": {
+            "description": "Template summaries",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/TemplateSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Create a template",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateCreateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Template created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Template file already exists",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Template object storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/template/{id}": {
+      "get": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Read raw MJML template content",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Raw MJML",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template or content not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Update a template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TemplateUpdateRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Template updated",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Template object storage unavailable",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "tags": [
+          "Templates"
+        ],
+        "summary": "Delete a template",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Template deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Template not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket": {
+      "get": {
+        "tags": [
+          "Buckets"
+        ],
+        "summary": "List S3 bucket configurations",
+        "responses": {
+          "200": {
+            "description": "Bucket summaries without credentials",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/BucketSummary"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Buckets"
+        ],
+        "summary": "Create an S3 bucket configuration",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/BucketRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Bucket configuration created",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Malformed JSON, invalid request, or validation failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "Request body exceeds the route limit",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/bucket/{id}": {
+      "delete": {
+        "tags": [
+          "Buckets"
+        ],
+        "summary": "Delete an S3 bucket configuration",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "id",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Bucket configuration deleted",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SuccessResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Bucket not found",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected persistence or service failure",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/logs": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "List delivery logs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "skip",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "in": "query",
+            "name": "take",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            }
+          },
+          {
+            "in": "query",
+            "name": "status",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "ENQUEUE_PENDING",
+                "QUEUED",
+                "PROCESSING",
+                "PENDING",
+                "SENT",
+                "FAILED",
+                "RETRYING",
+                "DEAD",
+                "DELIVERY_UNCERTAIN"
+              ]
+            }
+          },
+          {
+            "in": "query",
+            "name": "recipient",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Paginated delivery logs",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/LogsResponse"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/stats": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Get aggregate delivery statistics",
+        "responses": {
+          "200": {
+            "description": "Aggregate status counts",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "Peek at redacted RabbitMQ jobs",
+        "responses": {
+          "200": {
+            "description": "Redacted queue messages",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/workers": {
+      "get": {
+        "tags": [
+          "Operations"
+        ],
+        "summary": "List live worker heartbeats",
+        "responses": {
+          "200": {
+            "description": "Workers",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "additionalProperties": true
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Missing or invalid legacy API key",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
   "components": {
+    "securitySchemes": {
+      "LegacyApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-api-key",
+        "description": "Temporary server-to-server administrative credential."
+      }
+    },
     "schemas": {
-      "HealthResponse": {
+      "ErrorResponse": {
         "type": "object",
+        "additionalProperties": true,
+        "required": [
+          "success",
+          "code",
+          "message",
+          "requestId"
+        ],
         "properties": {
-          "status": {
-            "type": "string",
-            "example": "ok"
+          "success": {
+            "const": false
+          },
+          "code": {
+            "type": "string"
           },
           "message": {
+            "type": "string"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "details": {},
+          "error": {
             "type": "string",
-            "example": "SimpleMailer dashboard API is running"
+            "description": "Temporary legacy alias for message"
+          },
+          "fields": {
+            "description": "Temporary legacy alias for validation details"
+          }
+        }
+      },
+      "SuccessResponse": {
+        "type": "object",
+        "required": [
+          "success"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "status",
+          "message",
+          "version"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "message": {
+            "type": "string"
           },
           "version": {
-            "type": "string",
-            "example": "2.0.0"
+            "type": "string"
           }
         }
       },
       "MailJobRequest": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "accountId",
           "templateId",
@@ -65,25 +1384,95 @@
         "properties": {
           "accountId": {
             "type": "string",
-            "description": "ID of the SMTP account to send from"
+            "minLength": 1
           },
           "templateId": {
             "type": "string",
-            "description": "ID of the template to render"
+            "minLength": 1
           },
           "recipient": {
             "type": "string",
-            "description": "Recipient email address",
-            "example": "user@example.com"
+            "format": "email"
           },
           "values": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "Template variable substitutions",
-            "example": {
-              "name": "Alice",
-              "confirmUrl": "https://example.com/confirm"
-            }
+            "additionalProperties": true
+          }
+        }
+      },
+      "SendAcceptedResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "jobId",
+          "status"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "jobId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENQUEUE_PENDING",
+              "QUEUED",
+              "PROCESSING",
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING",
+              "DEAD",
+              "DELIVERY_UNCERTAIN"
+            ]
+          }
+        }
+      },
+      "SendStatusResponse": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "success",
+          "id",
+          "status",
+          "retryCount",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "success": {
+            "const": true
+          },
+          "id": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "ENQUEUE_PENDING",
+              "QUEUED",
+              "PROCESSING",
+              "PENDING",
+              "SENT",
+              "FAILED",
+              "RETRYING",
+              "DEAD",
+              "DELIVERY_UNCERTAIN"
+            ]
+          },
+          "retryCount": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         }
       },
@@ -94,19 +1483,17 @@
         ],
         "properties": {
           "recipient": {
-            "type": "string",
-            "format": "email",
-            "example": "user@example.com"
+            "type": "string"
           },
           "values": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "Per-recipient template values that override sharedValues"
+            "additionalProperties": true
           }
         }
       },
       "BulkSendRequest": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "accountId",
           "templateId",
@@ -115,76 +1502,49 @@
         "properties": {
           "accountId": {
             "type": "string",
-            "description": "ID of the SMTP account to send from"
+            "minLength": 1
           },
           "templateId": {
             "type": "string",
-            "description": "ID of the template to render"
+            "minLength": 1
           },
           "sharedValues": {
             "type": "object",
-            "additionalProperties": true,
-            "description": "Template values shared by every recipient",
-            "example": {
-              "campaignName": "March Launch",
-              "baseUrl": "https://example.com"
-            }
+            "additionalProperties": true
           },
           "recipients": {
             "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
             "items": {
               "$ref": "#/components/schemas/BulkSendRecipient"
-            },
-            "example": [
-              {
-                "recipient": "alice@example.com",
-                "values": {
-                  "name": "Alice",
-                  "confirmUrl": "https://example.com/a"
-                }
-              },
-              {
-                "recipient": "bob@example.com",
-                "values": {
-                  "name": "Bob",
-                  "confirmUrl": "https://example.com/b"
-                }
-              }
-            ]
+            }
           },
           "options": {
             "type": "object",
             "properties": {
               "minDelayMs": {
-                "type": "integer",
-                "description": "Requested minimum spacing between accepted recipients. The server will clamp this to safe bounds.",
-                "example": 10000
+                "type": "number",
+                "minimum": 0
               }
             }
           }
         }
       },
-      "BulkSendRejectedItem": {
-        "type": "object",
-        "properties": {
-          "index": {
-            "type": "integer"
-          },
-          "recipient": {
-            "type": "string",
-            "nullable": true
-          },
-          "error": {
-            "type": "string"
-          }
-        }
-      },
       "BulkSendAcceptedResponse": {
         "type": "object",
+        "required": [
+          "success",
+          "batchId",
+          "requestedCount",
+          "acceptedCount",
+          "rejectedCount",
+          "effectiveMinDelayMs",
+          "rejectedItems"
+        ],
         "properties": {
           "success": {
-            "type": "boolean",
-            "example": true
+            "const": true
           },
           "batchId": {
             "type": "string"
@@ -204,125 +1564,35 @@
           "rejectedItems": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/BulkSendRejectedItem"
+              "type": "object",
+              "additionalProperties": true
             }
-          }
-        }
-      },
-      "BulkSendItem": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "sequence": {
-            "type": "integer"
-          },
-          "recipient": {
-            "type": "string"
-          },
-          "values": {
-            "type": "object",
-            "additionalProperties": true
-          },
-          "validationError": {
-            "type": "string",
-            "nullable": true
-          },
-          "logId": {
-            "type": "string",
-            "nullable": true
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "REJECTED",
-              "ENQUEUE_PENDING",
-              "QUEUED",
-              "PROCESSING",
-              "PENDING",
-              "SENT",
-              "FAILED",
-              "RETRYING",
-              "DEAD",
-              "DELIVERY_UNCERTAIN"
-            ]
-          },
-          "scheduledFor": {
-            "type": "string",
-            "format": "date-time",
-            "nullable": true
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
           }
         }
       },
       "BulkSendBatchResponse": {
         "type": "object",
+        "required": [
+          "success",
+          "batch",
+          "items",
+          "total",
+          "skip",
+          "take"
+        ],
         "properties": {
           "success": {
-            "type": "boolean",
-            "example": true
+            "const": true
           },
           "batch": {
             "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "accountId": {
-                "type": "string"
-              },
-              "templateId": {
-                "type": "string"
-              },
-              "requestedCount": {
-                "type": "integer"
-              },
-              "acceptedCount": {
-                "type": "integer"
-              },
-              "rejectedCount": {
-                "type": "integer"
-              },
-              "requestedMinDelayMs": {
-                "type": "integer",
-                "nullable": true
-              },
-              "effectiveMinDelayMs": {
-                "type": "integer"
-              },
-              "completedAt": {
-                "type": "string",
-                "format": "date-time",
-                "nullable": true
-              },
-              "createdAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "updatedAt": {
-                "type": "string",
-                "format": "date-time"
-              },
-              "countsByStatus": {
-                "type": "object",
-                "additionalProperties": {
-                  "type": "integer"
-                }
-              }
-            }
+            "additionalProperties": true
           },
           "items": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/BulkSendItem"
+              "type": "object",
+              "additionalProperties": true
             }
           },
           "total": {
@@ -338,6 +1608,7 @@
       },
       "AccountRequest": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "name",
           "username",
@@ -348,42 +1619,38 @@
         "properties": {
           "name": {
             "type": "string",
-            "example": "Primary SMTP"
+            "minLength": 1
           },
           "username": {
             "type": "string",
-            "example": "noreply@example.com"
+            "minLength": 1
           },
           "password": {
             "type": "string",
-            "example": "app-password-here"
+            "minLength": 1,
+            "writeOnly": true
           },
           "emailHost": {
             "type": "string",
-            "example": "smtp.example.com"
+            "minLength": 1
           },
           "emailPort": {
             "type": "integer",
-            "example": 587
+            "minimum": 1,
+            "maximum": 65535
           }
         }
       },
       "AccountSummary": {
         "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "username": {
-            "type": "string"
-          }
-        }
-      },
-      "AccountDetail": {
-        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "username",
+          "emailHost",
+          "emailPort",
+          "createdAt"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -396,6 +1663,89 @@
           },
           "emailHost": {
             "type": "string"
+          },
+          "emailPort": {
+            "type": "integer"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TemplateCreateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "name",
+          "subject",
+          "content"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          },
+          "storageType": {
+            "type": "string",
+            "enum": [
+              "LOCAL",
+              "S3"
+            ],
+            "default": "LOCAL"
+          }
+        }
+      },
+      "TemplateUpdateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "minProperties": 1,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "string"
+          }
+        }
+      },
+      "TemplateSummary": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "subject",
+          "storageType",
+          "createdAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          },
+          "storageType": {
+            "type": "string",
+            "enum": [
+              "LOCAL",
+              "S3"
+            ]
           },
           "createdAt": {
             "type": "string",
@@ -405,6 +1755,7 @@
       },
       "BucketRequest": {
         "type": "object",
+        "additionalProperties": false,
         "required": [
           "name",
           "path",
@@ -415,28 +1766,36 @@
         "properties": {
           "name": {
             "type": "string",
-            "example": "my-templates-bucket"
+            "minLength": 1
           },
           "path": {
             "type": "string",
-            "example": "templates/"
+            "minLength": 1
           },
           "accessKeyId": {
             "type": "string",
-            "example": "AKIAIOSFODNN7EXAMPLE"
+            "minLength": 1,
+            "writeOnly": true
           },
           "secretAccessKey": {
             "type": "string",
-            "example": "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+            "minLength": 1,
+            "writeOnly": true
           },
           "region": {
             "type": "string",
-            "example": "us-east-1"
+            "minLength": 1
           }
         }
       },
       "BucketSummary": {
         "type": "object",
+        "required": [
+          "id",
+          "name",
+          "path",
+          "region"
+        ],
         "properties": {
           "id": {
             "type": "string"
@@ -452,597 +1811,22 @@
           }
         }
       },
-      "TemplateSummary": {
+      "LogsResponse": {
         "type": "object",
+        "required": [
+          "data",
+          "total"
+        ],
         "properties": {
-          "id": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        }
-      },
-      "LogEntry": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "recipient": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string",
-            "enum": [
-              "PENDING",
-              "SENT",
-              "FAILED",
-              "RETRYING"
-            ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "account": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
+          "data": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": true
             }
           },
-          "template": {
-            "type": "object",
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "name": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      },
-      "SuccessResponse": {
-        "type": "object",
-        "properties": {
-          "success": {
-            "type": "boolean"
-          },
-          "message": {
-            "type": "string",
-            "description": "ID of the created resource on success, error detail on failure"
-          }
-        }
-      },
-      "ValidationError": {
-        "type": "object",
-        "properties": {
-          "error": {
-            "type": "string",
-            "example": "Validation failed"
-          },
-          "fields": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "array",
-              "items": {
-                "type": "string"
-              }
-            }
-          }
-        }
-      }
-    }
-  },
-  "paths": {
-    "/api/account": {
-      "get": {
-        "summary": "List SMTP accounts",
-        "description": "Returns all accounts. When an `id` query parameter is provided, returns the full detail (including `emailHost` and `createdAt`) for that single account. Without `id`, returns a lighter summary list.\n",
-        "tags": [
-          "Accounts"
-        ],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "id",
-            "schema": {
-              "type": "string"
-            },
-            "description": "Filter by account ID — returns full detail for that account"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of accounts",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "oneOf": [
-                      {
-                        "$ref": "#/components/schemas/AccountSummary"
-                      },
-                      {
-                        "$ref": "#/components/schemas/AccountDetail"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Create an SMTP account",
-        "description": "Creates a new SMTP account. Passwords are stored as-is (app passwords).",
-        "tags": [
-          "Accounts"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/AccountRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Account created — `message` contains the new account ID",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Database error (e.g. duplicate username)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/bucket": {
-      "get": {
-        "summary": "List S3 buckets",
-        "description": "Returns all configured S3 buckets (id, name, path, region). Credentials are never returned.",
-        "tags": [
-          "Buckets"
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of bucket summaries",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/BucketSummary"
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      "post": {
-        "summary": "Create an S3 bucket configuration",
-        "description": "Stores a new S3 bucket configuration including credentials.",
-        "tags": [
-          "Buckets"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BucketRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Bucket created — `message` contains the new bucket ID",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Database error (e.g. duplicate name)",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/health": {
-      "get": {
-        "summary": "Health check",
-        "description": "Returns the current status, a human-readable message, and the API version.",
-        "tags": [
-          "System"
-        ],
-        "responses": {
-          "200": {
-            "description": "API is running",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HealthResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/jobs": {
-      "get": {
-        "summary": "List queued mail jobs",
-        "description": "Returns up to 10 messages currently sitting in the RabbitMQ `mailer` queue (non-destructive peek via management API).",
-        "tags": [
-          "Jobs"
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of raw queue message objects",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "type": "object",
-                    "additionalProperties": true
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/logs": {
-      "get": {
-        "summary": "List delivery logs",
-        "description": "Returns the most recent mail delivery log records ordered by creation date descending, with nested account and template info.",
-        "tags": [
-          "Logs"
-        ],
-        "parameters": [
-          {
-            "in": "query",
-            "name": "limit",
-            "schema": {
-              "type": "integer",
-              "default": 10
-            },
-            "description": "Maximum number of log entries to return"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of log entries",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/LogEntry"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/send": {
-      "post": {
-        "summary": "Queue a mail job",
-        "description": "Validates the payload and publishes a `mail.send` message to the durable RabbitMQ `mailer` queue.",
-        "tags": [
-          "Mail"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/MailJobRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Message successfully queued",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "Failed to publish to queue",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/send/bulk": {
-      "post": {
-        "summary": "Queue a paced bulk mail batch",
-        "description": "Validates the payload, stores the batch and its recipients, and applies DB-backed pacing per account so workers publish each recipient when due.",
-        "tags": [
-          "Mail"
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/BulkSendRequest"
-              }
-            }
-          }
-        },
-        "responses": {
-          "202": {
-            "description": "Bulk batch accepted",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BulkSendAcceptedResponse"
-                }
-              }
-            }
-          },
-          "400": {
-            "description": "Validation failed or all recipients were rejected",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ValidationError"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Account or template not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          },
-          "429": {
-            "description": "Rate limit exceeded",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/send/bulk/{id}": {
-      "get": {
-        "summary": "Inspect a bulk send batch",
-        "description": "Returns batch counts and paginated recipient item statuses for a paced bulk send.",
-        "tags": [
-          "Mail"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          },
-          {
-            "in": "query",
-            "name": "skip",
-            "schema": {
-              "type": "integer",
-              "default": 0
-            }
-          },
-          {
-            "in": "query",
-            "name": "take",
-            "schema": {
-              "type": "integer",
-              "default": 50
-            }
-          },
-          {
-            "in": "query",
-            "name": "status",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Bulk batch details",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/BulkSendBatchResponse"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Bulk batch not found",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SuccessResponse"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/template/{id}": {
-      "get": {
-        "summary": "Get template content",
-        "description": "Returns the raw template file content as plain text. For `LOCAL` storage type, the file is read from the `../../templates/` directory. For `S3` storage type, an empty string is returned (S3 fetching not yet implemented).\n",
-        "tags": [
-          "Templates"
-        ],
-        "parameters": [
-          {
-            "in": "path",
-            "name": "id",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "description": "Template ID"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Template file contents",
-            "content": {
-              "text/plain": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "Template not found in database or file not found on disk",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "error": {
-                      "type": "string"
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/template": {
-      "get": {
-        "summary": "List email templates",
-        "description": "Returns all templates as lightweight summaries (id + name). Use `GET /api/template/{id}` to fetch the rendered content.",
-        "tags": [
-          "Templates"
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of template summaries",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/components/schemas/TemplateSummary"
-                  }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/api/workers": {
-      "get": {
-        "summary": "List active workers",
-        "description": "Returns workers that sent a heartbeat within the last 30 seconds.",
-        "tags": [
-          "Workers"
-        ],
-        "responses": {
-          "200": {
-            "description": "Array of active worker heartbeat records"
+          "total": {
+            "type": "integer"
           }
         }
       }

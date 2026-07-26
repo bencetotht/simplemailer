@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
+import { apiError, jsonResponse } from "@/lib/http";
 
 export async function DELETE(
   _request: NextRequest,
@@ -12,12 +13,18 @@ export async function DELETE(
   const { id } = await params;
 
   try {
+    const existing = await prisma.account.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return apiError(_request, 404, "ACCOUNT_NOT_FOUND", "Account not found");
+    }
     await prisma.account.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return jsonResponse(_request, { success: true });
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Failed to delete account" },
-      { status: 500 }
+    return apiError(
+      _request,
+      500,
+      "ACCOUNT_DELETE_FAILED",
+      "Failed to delete account",
     );
   }
 }

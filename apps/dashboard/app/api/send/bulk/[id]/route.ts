@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
 import { Prisma, Status } from "database";
@@ -7,6 +7,7 @@ import {
   isTerminalLogStatus,
   summarizeBulkItems,
 } from "@/lib/bulk-send";
+import { apiError, jsonResponse } from "@/lib/http";
 
 function parsePaging(searchParams: URLSearchParams): { skip: number; take: number; status?: string } {
   const skipRaw = Number(searchParams.get("skip") ?? 0);
@@ -66,9 +67,11 @@ export async function GET(
   const paging = parsePaging(request.nextUrl.searchParams);
   const validStatuses = new Set<string>([...Object.values(Status), BULK_REJECTED_STATUS]);
   if (paging.status && !validStatuses.has(paging.status)) {
-    return NextResponse.json(
-      { success: false, message: "Invalid status filter" },
-      { status: 400 },
+    return apiError(
+      request,
+      400,
+      "INVALID_STATUS_FILTER",
+      "Invalid status filter",
     );
   }
 
@@ -90,9 +93,11 @@ export async function GET(
   });
 
   if (!batch) {
-    return NextResponse.json(
-      { success: false, message: "Bulk batch not found" },
-      { status: 404 },
+    return apiError(
+      request,
+      404,
+      "BULK_BATCH_NOT_FOUND",
+      "Bulk batch not found",
     );
   }
 
@@ -148,7 +153,7 @@ export async function GET(
     batch.completedAt = completedAt;
   }
 
-  return NextResponse.json({
+  return jsonResponse(request, {
     success: true,
     batch: {
       id: batch.id,

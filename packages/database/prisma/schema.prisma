@@ -70,6 +70,7 @@ model Log {
   scheduledFor DateTime?
   status      Status    @default(ENQUEUE_PENDING)
   enqueueKey  String?   @unique
+  requestDigest String?
   correlationId String?
   retryCount  Int       @default(0)
   nextAttemptAt DateTime?
@@ -101,6 +102,7 @@ model BulkSendBatch {
   acceptedCount      Int
   rejectedCount      Int
   enqueueKey         String?  @unique
+  requestDigest      String?
   correlationId      String?
   requestedMinDelayMs Int?
   effectiveMinDelayMs Int

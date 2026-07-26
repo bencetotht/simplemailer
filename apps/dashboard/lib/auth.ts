@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "crypto";
 import type { NextRequest } from "next/server";
 import { NextResponse } from "next/server";
+import { apiError } from "@/lib/http";
+import { LEGACY_API_KEY_HEADER } from "@/lib/legacy-contract";
 
 let hasWarnedMissingApiKey = false;
 
@@ -27,17 +29,21 @@ export function requireApiKey(request: NextRequest): NextResponse | null {
       return null;
     }
 
-    return NextResponse.json(
-      { success: false, message: "DASHBOARD_API_KEY is not configured" },
-      { status: 500 },
+    return apiError(
+      request,
+      503,
+      "AUTH_CONFIGURATION_MISSING",
+      "Legacy API authentication is not configured",
     );
   }
 
-  const provided = request.headers.get("x-api-key");
+  const provided = request.headers.get(LEGACY_API_KEY_HEADER);
   if (!provided || !safeCompare(provided, expected)) {
-    return NextResponse.json(
-      { success: false, message: "Unauthorized" },
-      { status: 401 },
+    return apiError(
+      request,
+      401,
+      "INVALID_API_KEY",
+      "A valid x-api-key credential is required",
     );
   }
 

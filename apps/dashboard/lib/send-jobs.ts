@@ -11,6 +11,8 @@ export interface EnqueueableMailLog {
   recipient: string;
   values: Prisma.JsonValue | null;
   correlationId?: string | null;
+  requestId?: string | null;
+  enqueueKey?: string | null;
 }
 
 export interface PublishLogResult {
@@ -58,7 +60,12 @@ export async function publishLogRecords(logs: EnqueueableMailLog[]): Promise<Pub
       });
       queuedIds.push(log.id);
     } catch (error) {
-      logServerError("send_jobs.publish_failed", error, { jobId: log.id });
+      logServerError("send_jobs.publish_failed", error, {
+        requestId: log.requestId,
+        correlationId,
+        enqueueKey: log.enqueueKey,
+        jobId: log.id,
+      });
       await prisma.log.updateMany({
         where: {
           id: log.id,

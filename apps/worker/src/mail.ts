@@ -3,8 +3,7 @@ import type { MailJob, WorkerConfig } from './types';
 import { PermanentMailError, RetryableMailError, ValueError } from './errors';
 import { compileTemplate } from './template';
 import type { S3Client } from '@aws-sdk/client-s3';
-
-const nodemailer = require('nodemailer').default || require('nodemailer');
+import nodemailer from 'nodemailer';
 
 type AccountCredentials = Pick<Account, 'username' | 'emailHost' | 'emailPort'> & { password: string };
 
@@ -58,6 +57,7 @@ export async function sendMail(
   data: MailJob,
   config: WorkerConfig,
   s3Client: S3Client | null,
+  onDeliveryStart?: () => void | Promise<void>,
 ): Promise<void> {
   const compiled = await compileTemplate(template, data.values, config, s3Client);
   const port = account.emailPort ?? 587;
@@ -84,6 +84,8 @@ export async function sendMail(
   }
 
   try {
+    // This callback persists the delivery-attempt boundary. It must complete
+    // successfully before nodemailer is allowed to hand the message to SMTP.
     await onDeliveryStart?.();
     await transporter.sendMail({
       from: account.username,

@@ -1,6 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextRequest } from "next/server";
 import { prisma } from "@/lib/db";
 import { requireApiKey } from "@/lib/auth";
+import { apiError, jsonResponse } from "@/lib/http";
 
 export async function DELETE(
   _request: NextRequest,
@@ -12,12 +13,18 @@ export async function DELETE(
   const { id } = await params;
 
   try {
+    const existing = await prisma.bucket.findUnique({ where: { id }, select: { id: true } });
+    if (!existing) {
+      return apiError(_request, 404, "BUCKET_NOT_FOUND", "Bucket not found");
+    }
     await prisma.bucket.delete({ where: { id } });
-    return NextResponse.json({ success: true });
+    return jsonResponse(_request, { success: true });
   } catch {
-    return NextResponse.json(
-      { success: false, message: "Failed to delete bucket" },
-      { status: 500 }
+    return apiError(
+      _request,
+      500,
+      "BUCKET_DELETE_FAILED",
+      "Failed to delete bucket",
     );
   }
 }

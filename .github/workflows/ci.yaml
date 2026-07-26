@@ -31,6 +31,8 @@ jobs:
           cache: pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
+      - run: pnpm --filter dashboard openapi:generate
+      - run: git diff --exit-code -- apps/dashboard/openapi.json
       - run: pnpm lint
       - run: pnpm type-check
       - run: pnpm test

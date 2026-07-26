@@ -13,12 +13,22 @@ interface RateLimitConfig {
 const buckets = new Map<string, TokenBucket>();
 
 function getClientIp(request: NextRequest): string {
+  // Phase 1 limiter is intentionally process-local and therefore non-HA.
+  // Forwarded headers are ignored unless the deployment explicitly declares
+  // that its ingress proxy is trusted.
+  if (process.env.TRUST_PROXY !== "true") {
+    return "untrusted-direct-client";
+  }
   const forwardedFor = request.headers.get("x-forwarded-for");
   if (forwardedFor) {
     const first = forwardedFor.split(",")[0]?.trim();
     if (first) return first;
   }
   return request.headers.get("x-real-ip") ?? "unknown";
+}
+
+export function resetRateLimitsForTests(): void {
+  buckets.clear();
 }
 
 function refillBucket(bucket: TokenBucket, config: RateLimitConfig, now: number): void {
