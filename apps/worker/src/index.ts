@@ -16,6 +16,7 @@ import { logRedactedError } from './log';
 import { connectRabbitMQ, setupTopology } from './queue';
 import { startEnqueueReconciler } from './reconciler';
 import { createS3Client } from './s3';
+import { startWebhookDispatcher } from './webhooks';
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -110,6 +111,7 @@ async function main() {
     () => getHealthSnapshot().healthy,
   );
   const reconciler = startEnqueueReconciler(() => currentChannel, config);
+  const webhookDispatcher = startWebhookDispatcher(config, metrics);
 
   const shutdown = async (signal: string) => {
     if (shuttingDown) return;
@@ -199,6 +201,7 @@ async function main() {
   }
 
   reconciler.stop();
+  await webhookDispatcher.stop();
   metricsUpdater.stop();
   metricsServer.stop();
 

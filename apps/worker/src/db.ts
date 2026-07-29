@@ -1,6 +1,7 @@
 import { prisma } from 'database';
 import type { Account, Log, Message, Template } from 'database';
 import { Status } from 'database';
+import { recordMessageWebhookEvent } from 'database/webhooks';
 import type { MailJob } from './types';
 import { ValueError } from './errors';
 import { decryptSecret } from './secrets';
@@ -261,27 +262,32 @@ export async function claimMessageForProcessing(
   leaseMs: number,
 ): Promise<boolean> {
   const now = new Date();
-  const result = await prisma.message.updateMany({
-    where: {
-      id,
-      OR: [
-        { status: { in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.RETRYING, Status.PENDING] } },
-        {
-          status: Status.PROCESSING,
-          processingLeaseExpiresAt: { lte: now },
-          deliveryAttemptStartedAt: null,
-        },
-      ],
-    },
-    data: {
-      status: Status.PROCESSING,
-      lastAttemptAt: now,
-      processingOwner,
-      processingLeaseExpiresAt: new Date(now.getTime() + leaseMs),
-      deliveryAttemptStartedAt: null,
-    },
+  return prisma.$transaction(async (tx) => {
+    const result = await tx.message.updateMany({
+      where: {
+        id,
+        OR: [
+          { status: { in: [Status.ENQUEUE_PENDING, Status.QUEUED, Status.RETRYING, Status.PENDING] } },
+          {
+            status: Status.PROCESSING,
+            processingLeaseExpiresAt: { lte: now },
+            deliveryAttemptStartedAt: null,
+          },
+        ],
+      },
+      data: {
+        status: Status.PROCESSING,
+        lastAttemptAt: now,
+        processingOwner,
+        processingLeaseExpiresAt: new Date(now.getTime() + leaseMs),
+        deliveryAttemptStartedAt: null,
+      },
+    });
+    if (result.count === 0) return false;
+    const message = await tx.message.findUniqueOrThrow({ where: { id } });
+    await recordMessageWebhookEvent(tx, message, now);
+    return true;
   });
-  return result.count > 0;
 }
 
 export async function markMessageDeliveryStarted(
@@ -323,23 +329,28 @@ export async function updateMessageStatus(
   },
 ) {
   const terminal = MESSAGE_TERMINAL_STATUSES.includes(status as typeof MESSAGE_TERMINAL_STATUSES[number]);
-  const result = await prisma.message.updateMany({
-    where: { id, processingOwner: opts.processingOwner },
-    data: {
-      status,
-      ...(opts.retryCount !== undefined && { retryCount: opts.retryCount }),
-      ...(opts.lastError !== undefined && { lastError: opts.lastError }),
-      ...(opts.failureClass !== undefined && { failureClass: opts.failureClass }),
-      ...(opts.nextAttemptAt !== undefined && { nextAttemptAt: opts.nextAttemptAt }),
-      ...(opts.lastAttemptAt !== undefined && { lastAttemptAt: opts.lastAttemptAt }),
-      ...(terminal && { completedAt: new Date() }),
-      processingOwner: null,
-      processingLeaseExpiresAt: null,
-    },
+  await prisma.$transaction(async (tx) => {
+    const occurredAt = new Date();
+    const result = await tx.message.updateMany({
+      where: { id, processingOwner: opts.processingOwner },
+      data: {
+        status,
+        ...(opts.retryCount !== undefined && { retryCount: opts.retryCount }),
+        ...(opts.lastError !== undefined && { lastError: opts.lastError }),
+        ...(opts.failureClass !== undefined && { failureClass: opts.failureClass }),
+        ...(opts.nextAttemptAt !== undefined && { nextAttemptAt: opts.nextAttemptAt }),
+        ...(opts.lastAttemptAt !== undefined && { lastAttemptAt: opts.lastAttemptAt }),
+        ...(terminal && { completedAt: occurredAt }),
+        processingOwner: null,
+        processingLeaseExpiresAt: null,
+      },
+    });
+    if (result.count === 0) {
+      throw new ValueError(`Processing lease for message ${id} is no longer owned by this worker`);
+    }
+    const message = await tx.message.findUniqueOrThrow({ where: { id } });
+    await recordMessageWebhookEvent(tx, message, occurredAt);
   });
-  if (result.count === 0) {
-    throw new ValueError(`Processing lease for message ${id} is no longer owned by this worker`);
-  }
 }
 
 export async function getTemplate(templateId: string): Promise<Template> {
@@ -455,15 +466,21 @@ export async function releaseStaleMessageClaims(olderThanMs = 60_000): Promise<n
 }
 
 export async function markMessageQueuedAfterPublish(id: string): Promise<void> {
-  await prisma.message.updateMany({
-    where: { id, status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] } },
-    data: {
-      status: Status.QUEUED,
-      queuedAt: new Date(),
-      lastAttemptAt: new Date(),
-      failureClass: null,
-      lastError: null,
-    },
+  await prisma.$transaction(async (tx) => {
+    const occurredAt = new Date();
+    const result = await tx.message.updateMany({
+      where: { id, status: { in: [Status.ENQUEUE_PENDING, Status.PENDING] } },
+      data: {
+        status: Status.QUEUED,
+        queuedAt: occurredAt,
+        lastAttemptAt: occurredAt,
+        failureClass: null,
+        lastError: null,
+      },
+    });
+    if (result.count === 0) return;
+    const message = await tx.message.findUniqueOrThrow({ where: { id } });
+    await recordMessageWebhookEvent(tx, message, occurredAt);
   });
 }
 
@@ -483,36 +500,47 @@ export async function recoverExpiredMessageLeases(): Promise<{
   uncertain: number;
 }> {
   const now = new Date();
-  const uncertain = await prisma.message.updateMany({
-    where: {
-      status: Status.PROCESSING,
-      processingLeaseExpiresAt: { lte: now },
-      deliveryAttemptStartedAt: { not: null },
-    },
-    data: {
-      status: Status.DELIVERY_UNCERTAIN,
-      completedAt: now,
-      processingOwner: null,
-      processingLeaseExpiresAt: null,
-      failureClass: 'WORKER_LOST_DURING_SMTP_DELIVERY',
-      lastError: 'Worker lease expired after SMTP delivery began; automatic retry suppressed',
-    },
+  return prisma.$transaction(async (tx) => {
+    const expired = await tx.$queryRaw<Message[]>`
+      SELECT *
+      FROM "public"."Message"
+      WHERE "status" = 'PROCESSING'::"public"."Status"
+        AND "processingLeaseExpiresAt" <= ${now}
+      FOR UPDATE SKIP LOCKED
+    `;
+    let requeued = 0;
+    let uncertain = 0;
+    for (const message of expired) {
+      if (message.deliveryAttemptStartedAt) {
+        const updated = await tx.message.update({
+          where: { id: message.id },
+          data: {
+            status: Status.DELIVERY_UNCERTAIN,
+            completedAt: now,
+            processingOwner: null,
+            processingLeaseExpiresAt: null,
+            failureClass: 'WORKER_LOST_DURING_SMTP_DELIVERY',
+            lastError: 'Worker lease expired after SMTP delivery began; automatic retry suppressed',
+          },
+        });
+        await recordMessageWebhookEvent(tx, updated, now);
+        uncertain += 1;
+      } else {
+        await tx.message.update({
+          where: { id: message.id },
+          data: {
+            status: Status.ENQUEUE_PENDING,
+            processingOwner: null,
+            processingLeaseExpiresAt: null,
+            failureClass: 'PROCESSING_LEASE_EXPIRED',
+            lastError: 'Worker lease expired before SMTP delivery began; message requeued',
+          },
+        });
+        requeued += 1;
+      }
+    }
+    return { requeued, uncertain };
   });
-  const requeued = await prisma.message.updateMany({
-    where: {
-      status: Status.PROCESSING,
-      processingLeaseExpiresAt: { lte: now },
-      deliveryAttemptStartedAt: null,
-    },
-    data: {
-      status: Status.ENQUEUE_PENDING,
-      processingOwner: null,
-      processingLeaseExpiresAt: null,
-      failureClass: 'PROCESSING_LEASE_EXPIRED',
-      lastError: 'Worker lease expired before SMTP delivery began; message requeued',
-    },
-  });
-  return { requeued: requeued.count, uncertain: uncertain.count };
 }
 
 export async function getMetrics(): Promise<{

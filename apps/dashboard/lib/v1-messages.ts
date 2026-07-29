@@ -4,6 +4,7 @@ import {
   type ParsedCreateInlineMessage,
 } from "@simplemailer/contracts";
 import { ArtifactFormat, Prisma, SenderStatus, Status } from "database";
+import { recordMessageWebhookEvent } from "database/webhooks";
 import { prisma } from "@/lib/db";
 import { canonicalRequestDigest, isMateriallyDifferent } from "@/lib/idempotency";
 
@@ -131,7 +132,7 @@ export async function acceptInlineMessage(input: {
             update: {},
           });
 
-      return tx.message.create({
+      const created = await tx.message.create({
         data: {
           id: `msg_${randomUUID().replaceAll("-", "")}`,
           projectId,
@@ -153,6 +154,8 @@ export async function acceptInlineMessage(input: {
         },
         include: summaryInclude,
       });
+      await recordMessageWebhookEvent(tx, created);
+      return created;
     });
     if (!message) return { kind: "sender_not_found" };
     return { kind: "accepted", message: summarize(message) };

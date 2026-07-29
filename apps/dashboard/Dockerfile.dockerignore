@@ -10,9 +10,13 @@
 !packages
 !packages/database
 !packages/database/**
+!packages/contracts
+!packages/contracts/**
 apps/dashboard/.next
 apps/dashboard/node_modules
 apps/dashboard/.turbo
 apps/dashboard/tsconfig.tsbuildinfo
 packages/database/generated
 packages/database/node_modules
+packages/contracts/dist
+packages/contracts/node_modules

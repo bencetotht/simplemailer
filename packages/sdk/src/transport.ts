@@ -16,7 +16,7 @@ export interface RequestOptions {
 }
 
 export interface TransportRequest<TBody = unknown> {
-  method: "GET" | "POST" | "PUT" | "DELETE";
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   path: string;
   body?: TBody;
   options?: RequestOptions;
@@ -47,7 +47,8 @@ function retryConfiguration(
   options: RequestOptions | undefined,
 ): Required<RetryOptions> {
   const requested = options?.retry;
-  const safeToRetry = method !== "POST" || Boolean(options?.idempotencyKey);
+  const safeToRetry =
+    (method !== "POST" && method !== "PATCH") || Boolean(options?.idempotencyKey);
   if (!requested || !safeToRetry) {
     return { maxAttempts: 1, initialDelayMs: 200, maxDelayMs: 2_000 };
   }

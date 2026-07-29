@@ -52,6 +52,7 @@ export const openApiDocument = {
   security: protectedSecurity,
   tags: [
     { name: "Messages" },
+    { name: "Webhooks" },
     { name: "Mail" },
     { name: "Accounts" },
     { name: "Templates" },
@@ -92,6 +93,94 @@ export const openApiDocument = {
           "401": response("Missing, invalid, expired, revoked, or inactive project key"),
           "403": response("Project key lacks messages:read"),
           "404": response("Message not found in the authenticated project"),
+        },
+      },
+    },
+    "/v1/webhooks": {
+      get: {
+        tags: ["Webhooks"],
+        summary: "List project webhook endpoints",
+        security: [{ ProjectBearerKey: ["webhooks:read"] }],
+        responses: {
+          "200": response("Project webhook endpoints", ref("WebhookEndpointListResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:read"),
+        },
+      },
+      post: {
+        tags: ["Webhooks"],
+        summary: "Create a signed webhook endpoint",
+        description: "The signing secret is returned once. Production endpoints must use HTTPS.",
+        security: [{ ProjectBearerKey: ["webhooks:write"] }],
+        requestBody: { required: true, content: json(ref("CreateWebhookEndpointRequest")) },
+        responses: {
+          "201": response("Endpoint created; signing secret shown once", ref("WebhookEndpointResponse")),
+          "400": response("Invalid request or unsafe webhook URL"),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:write"),
+          "413": standardErrors["413"],
+        },
+      },
+    },
+    "/v1/webhooks/{id}": {
+      patch: {
+        tags: ["Webhooks"],
+        summary: "Update or pause a project webhook endpoint",
+        security: [{ ProjectBearerKey: ["webhooks:write"] }],
+        parameters: [idParameter],
+        requestBody: { required: true, content: json(ref("UpdateWebhookEndpointRequest")) },
+        responses: {
+          "200": response("Endpoint updated", ref("WebhookEndpointResponse")),
+          "400": response("Invalid request or unsafe webhook URL"),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:write"),
+          "404": response("Endpoint not found in the authenticated project"),
+        },
+      },
+    },
+    "/v1/webhooks/{id}/rotate-secret": {
+      post: {
+        tags: ["Webhooks"],
+        summary: "Rotate an endpoint signing secret",
+        description:
+          "Returns the new secret once. Already-created deliveries retain their signing-secret snapshot; keep the previous secret for the reported 24-hour overlap.",
+        security: [{ ProjectBearerKey: ["webhooks:write"] }],
+        parameters: [idParameter],
+        responses: {
+          "200": response("Secret rotated and shown once", ref("WebhookEndpointResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:write"),
+          "404": response("Endpoint not found in the authenticated project"),
+        },
+      },
+    },
+    "/v1/webhooks/{id}/test": {
+      post: {
+        tags: ["Webhooks"],
+        summary: "Queue a signed endpoint.test delivery",
+        security: [{ ProjectBearerKey: ["webhooks:write"] }],
+        parameters: [idParameter],
+        responses: {
+          "202": response("Test delivery queued", ref("WebhookReplayResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:write"),
+          "404": response("Endpoint not found in the authenticated project"),
+        },
+      },
+    },
+    "/v1/webhook-events/{id}/replay": {
+      post: {
+        tags: ["Webhooks"],
+        summary: "Replay an existing event to a project endpoint",
+        security: [{ ProjectBearerKey: ["webhooks:replay"] }],
+        parameters: [idParameter],
+        requestBody: { required: true, content: json(ref("ReplayWebhookEventRequest")) },
+        responses: {
+          "202": response("Delivery reset and queued", ref("WebhookReplayResponse")),
+          "400": standardErrors["400"],
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks webhooks:replay"),
+          "404": response("Event or endpoint not found in the authenticated project"),
         },
       },
     },
@@ -433,6 +522,13 @@ export const openApiDocument = {
       CreateInlineMessageRequest: publicJsonSchemas.CreateInlineMessageRequest,
       MessageSummary: publicJsonSchemas.MessageSummary,
       MessageResponse: publicJsonSchemas.MessageResponse,
+      CreateWebhookEndpointRequest: publicJsonSchemas.CreateWebhookEndpointRequest,
+      UpdateWebhookEndpointRequest: publicJsonSchemas.UpdateWebhookEndpointRequest,
+      WebhookEndpoint: publicJsonSchemas.WebhookEndpoint,
+      WebhookEndpointResponse: publicJsonSchemas.WebhookEndpointResponse,
+      WebhookEndpointListResponse: publicJsonSchemas.WebhookEndpointListResponse,
+      WebhookReplayResponse: publicJsonSchemas.WebhookReplayResponse,
+      ReplayWebhookEventRequest: publicJsonSchemas.ReplayWebhookEventRequest,
       SendAcceptedResponse: {
         type: "object",
         additionalProperties: false,

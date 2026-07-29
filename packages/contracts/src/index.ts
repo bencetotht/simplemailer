@@ -56,6 +56,76 @@ export const messageSummarySchema = z
 
 export const messageResponseSchema = z.object({ data: messageSummarySchema }).strict();
 
+export const WEBHOOK_EVENT_NAMES = [
+  "message.accepted",
+  "message.queued",
+  "message.processing",
+  "message.retrying",
+  "message.sent",
+  "message.failed",
+  "message.dead",
+  "message.delivery_uncertain",
+] as const;
+export const webhookEventNameSchema = z.enum(WEBHOOK_EVENT_NAMES);
+export const webhookEndpointStatusSchema = z.enum(["ACTIVE", "PAUSED", "DISABLED"]);
+export const createWebhookEndpointSchema = z
+  .object({
+    url: z.string().url().max(2048),
+    description: z.string().trim().max(256).optional(),
+    events: z.array(webhookEventNameSchema).min(1).max(WEBHOOK_EVENT_NAMES.length),
+  })
+  .strict()
+  .refine((value) => new Set(value.events).size === value.events.length, {
+    message: "Webhook event subscriptions must be unique",
+    path: ["events"],
+  });
+export const updateWebhookEndpointSchema = z
+  .object({
+    url: z.string().url().max(2048).optional(),
+    description: z.string().trim().max(256).nullable().optional(),
+    events: z.array(webhookEventNameSchema).min(1).max(WEBHOOK_EVENT_NAMES.length).optional(),
+    status: z.enum(["ACTIVE", "PAUSED"]).optional(),
+  })
+  .strict()
+  .refine((value) => Object.keys(value).length > 0, "At least one field is required");
+export const webhookEndpointSchema = z
+  .object({
+    id: z.string().startsWith("whe_"),
+    url: z.string().url(),
+    description: z.string().nullable(),
+    events: z.array(webhookEventNameSchema),
+    status: webhookEndpointStatusSchema,
+    consecutiveFailures: z.number().int().nonnegative(),
+    lastSuccessAt: z.string().datetime().nullable(),
+    lastFailureAt: z.string().datetime().nullable(),
+    disabledAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .strict();
+export const webhookEndpointResponseSchema = z
+  .object({
+    data: webhookEndpointSchema,
+    secret: z.string().startsWith("whsec_").optional(),
+    previousSecretValidUntil: z.string().datetime().optional(),
+  })
+  .strict();
+export const webhookEndpointListResponseSchema = z
+  .object({ data: z.array(webhookEndpointSchema) })
+  .strict();
+export const webhookReplayResponseSchema = z
+  .object({
+    data: z.object({
+      eventId: z.string().startsWith("evt_"),
+      deliveryId: z.string().startsWith("whd_"),
+      status: z.literal("PENDING"),
+    }),
+  })
+  .strict();
+export const replayWebhookEventSchema = z
+  .object({ endpointId: z.string().startsWith("whe_") })
+  .strict();
+
 export const apiErrorSchema = z
   .object({
     success: z.literal(false),
@@ -195,6 +265,10 @@ export type MessageStatus = z.infer<typeof messageStatusSchema>;
 export type CreateInlineMessage = z.input<typeof createInlineMessageSchema>;
 export type ParsedCreateInlineMessage = z.output<typeof createInlineMessageSchema>;
 export type MessageSummary = z.infer<typeof messageSummarySchema>;
+export type WebhookEventName = z.infer<typeof webhookEventNameSchema>;
+export type CreateWebhookEndpoint = z.infer<typeof createWebhookEndpointSchema>;
+export type UpdateWebhookEndpoint = z.infer<typeof updateWebhookEndpointSchema>;
+export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorSchema>;
 export type Sender = z.infer<typeof senderSchema>;
 export type UpsertSender = z.infer<typeof upsertSenderSchema>;
@@ -217,6 +291,13 @@ export const publicJsonSchemas = {
   CreateInlineMessageRequest: openApiSchema(createInlineMessageSchema),
   MessageSummary: openApiSchema(messageSummarySchema),
   MessageResponse: openApiSchema(messageResponseSchema),
+  CreateWebhookEndpointRequest: openApiSchema(createWebhookEndpointSchema),
+  UpdateWebhookEndpointRequest: openApiSchema(updateWebhookEndpointSchema),
+  WebhookEndpoint: openApiSchema(webhookEndpointSchema),
+  WebhookEndpointResponse: openApiSchema(webhookEndpointResponseSchema),
+  WebhookEndpointListResponse: openApiSchema(webhookEndpointListResponseSchema),
+  WebhookReplayResponse: openApiSchema(webhookReplayResponseSchema),
+  ReplayWebhookEventRequest: openApiSchema(replayWebhookEventSchema),
   Sender: openApiSchema(senderSchema),
   SenderListResponse: openApiSchema(senderListResponseSchema),
   UpsertSenderRequest: openApiSchema(upsertSenderSchema),

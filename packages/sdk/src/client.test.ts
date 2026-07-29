@@ -17,6 +17,19 @@ const summary = {
   failureClass: null,
   lastError: null,
 };
+const webhookEndpoint = {
+  id: "whe_123",
+  url: "https://hooks.example.com/simplemailer",
+  description: null,
+  events: ["message.sent"],
+  status: "ACTIVE",
+  consecutiveFailures: 0,
+  lastSuccessAt: null,
+  lastFailureAt: null,
+  disabledAt: null,
+  createdAt: "2026-07-26T12:00:00.000Z",
+  updatedAt: "2026-07-26T12:00:00.000Z",
+};
 
 describe("SimpleMailer", () => {
   test("supports an injectable transport for unit tests and NestJS services", async () => {
@@ -59,6 +72,29 @@ describe("SimpleMailer", () => {
       ["CONFIGURATION"],
     );
     await expect(provider.useFactory(new Configuration())).resolves.toBeInstanceOf(SimpleMailer);
+  });
+
+  test("exposes typed webhook management without hiding one-time secrets", async () => {
+    const requests: TransportRequest[] = [];
+    const transport: HttpTransport = {
+      async request<T>(request: TransportRequest): Promise<T> {
+        requests.push(request);
+        return { data: webhookEndpoint, secret: "whsec_once" } as T;
+      },
+    };
+    const client = new SimpleMailer({ transport });
+
+    await expect(
+      client.webhooks.create({
+        url: webhookEndpoint.url,
+        events: ["message.sent"],
+      }),
+    ).resolves.toEqual({ endpoint: webhookEndpoint, secret: "whsec_once" });
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      path: "/v1/webhooks",
+      body: { url: webhookEndpoint.url, events: ["message.sent"] },
+    });
   });
 
   test("returns structured errors with retry metadata", async () => {

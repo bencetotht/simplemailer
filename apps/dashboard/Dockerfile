@@ -10,19 +10,23 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/dashboard/package.json ./apps/dashboard/
 COPY apps/worker/package.json ./apps/worker/
 COPY packages/database/package.json ./packages/database/
+COPY packages/contracts/package.json ./packages/contracts/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile --filter dashboard --filter database
+    pnpm install --frozen-lockfile --filter dashboard --filter database --filter @simplemailer/contracts
 
 FROM base AS builder
 ENV DATABASE_URL=postgresql://prisma:prisma@localhost:5432/prisma
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/dashboard/node_modules ./apps/dashboard/node_modules
 COPY --from=deps /app/packages/database/node_modules ./packages/database/node_modules
+COPY --from=deps /app/packages/contracts/node_modules ./packages/contracts/node_modules
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY apps/dashboard ./apps/dashboard
 COPY packages/database ./packages/database
+COPY packages/contracts ./packages/contracts
 RUN pnpm --filter database db:generate
+RUN pnpm --filter @simplemailer/contracts build
 RUN pnpm --filter dashboard build
 
 FROM base AS runner

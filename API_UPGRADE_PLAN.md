@@ -1092,7 +1092,35 @@ Do not remove legacy routes solely because the dashboard has migrated.
 
 ## Phase 4 implementation notes
 
-Not started.
+In progress as of 2026-07-26:
+
+- Added the first production-platform slice for signed delivery webhooks.
+  Project-scoped endpoints store encrypted signing secrets, return secrets only
+  on creation/rotation, support a 24-hour rotation overlap, and snapshot both
+  target URL and signing secret for every delivery.
+- Message lifecycle events are recorded transactionally with immutable-message
+  state changes for accepted, queued, processing, retrying, sent, failed, dead,
+  and delivery-uncertain states. Sanitized payloads omit recipients, bodies,
+  variables, credentials, and provider responses.
+- Added HA-safe database-leased webhook dispatch using `FOR UPDATE SKIP LOCKED`,
+  timestamped raw-body HMAC-SHA256 signatures, explicit no-redirect delivery,
+  request timeouts, capped exponential backoff with jitter, attempt exhaustion,
+  and automatic disabling after a configurable consecutive-failure threshold.
+  Delivery outcome metrics use only bounded labels.
+- Added scoped endpoint list/create/update, secret rotation, endpoint test, and
+  event replay APIs with project ownership in every query and audit records for
+  webhook control-plane actions. OpenAPI and operator documentation describe
+  signing, replay tolerance, at-least-once delivery, URL restrictions, and
+  required egress controls.
+- Extended the TypeScript SDK with typed webhook list/create/update,
+  secret-rotation, test, and replay methods. Verification passes for
+  `pnpm db:generate`, type-check, lint, test, and build; the complete migration
+  history including the webhook/outbox tables also applies to a fresh
+  PostgreSQL 17 database.
+- Still pending in Phase 4: distributed rate limits/quotas, OpenTelemetry and
+  broader project observability, retention/redaction jobs, the remaining
+  operational APIs, multi-replica/outage exercises, disaster-recovery
+  rehearsals, and legacy deprecation. Production/HA readiness is not claimed.
 
 ---
 

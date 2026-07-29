@@ -7,12 +7,20 @@ import {
   templateUpsertResponseSchema,
   upsertSenderSchema,
   upsertTemplateSchema,
+  createWebhookEndpointSchema,
+  updateWebhookEndpointSchema,
+  webhookEndpointListResponseSchema,
+  webhookEndpointResponseSchema,
+  webhookReplayResponseSchema,
   type CreateInlineMessage,
   type MessageSummary,
   type Sender,
   type Template,
   type UpsertSender,
   type UpsertTemplate,
+  type CreateWebhookEndpoint,
+  type UpdateWebhookEndpoint,
+  type WebhookEndpoint,
 } from "@simplemailer/contracts";
 import { SimpleMailerError } from "./errors.js";
 import {
@@ -117,6 +125,111 @@ export class TemplatesClient {
   }
 }
 
+export class WebhooksClient {
+  constructor(private readonly transport: HttpTransport) {}
+
+  async list(options?: RequestOptions): Promise<WebhookEndpoint[]> {
+    const response = await this.transport.request<unknown>({
+      method: "GET",
+      path: "/v1/webhooks",
+      ...(options === undefined ? {} : { options }),
+    });
+    return parseResponse(webhookEndpointListResponseSchema, response).data;
+  }
+
+  async create(
+    endpoint: CreateWebhookEndpoint,
+    options?: RequestOptions,
+  ): Promise<{ endpoint: WebhookEndpoint; secret: string }> {
+    const body = createWebhookEndpointSchema.parse(endpoint);
+    const response = parseResponse(
+      webhookEndpointResponseSchema,
+      await this.transport.request<unknown>({
+        method: "POST",
+        path: "/v1/webhooks",
+        body,
+        ...(options === undefined ? {} : { options }),
+      }),
+    );
+    if (!response.secret) {
+      throw new SimpleMailerError("Webhook creation response omitted its one-time secret", {
+        code: "INVALID_RESPONSE",
+      });
+    }
+    return { endpoint: response.data, secret: response.secret };
+  }
+
+  async update(
+    endpointId: string,
+    update: UpdateWebhookEndpoint,
+    options?: RequestOptions,
+  ): Promise<WebhookEndpoint> {
+    const body = updateWebhookEndpointSchema.parse(update);
+    const response = await this.transport.request<unknown>({
+      method: "PATCH",
+      path: `/v1/webhooks/${encodeURIComponent(endpointId)}`,
+      body,
+      ...(options === undefined ? {} : { options }),
+    });
+    return parseResponse(webhookEndpointResponseSchema, response).data;
+  }
+
+  async rotateSecret(
+    endpointId: string,
+    options?: RequestOptions,
+  ): Promise<{
+    endpoint: WebhookEndpoint;
+    secret: string;
+    previousSecretValidUntil?: string;
+  }> {
+    const response = parseResponse(
+      webhookEndpointResponseSchema,
+      await this.transport.request<unknown>({
+        method: "POST",
+        path: `/v1/webhooks/${encodeURIComponent(endpointId)}/rotate-secret`,
+        body: {},
+        ...(options === undefined ? {} : { options }),
+      }),
+    );
+    if (!response.secret) {
+      throw new SimpleMailerError("Webhook rotation response omitted its one-time secret", {
+        code: "INVALID_RESPONSE",
+      });
+    }
+    return {
+      endpoint: response.data,
+      secret: response.secret,
+      ...(response.previousSecretValidUntil === undefined
+        ? {}
+        : { previousSecretValidUntil: response.previousSecretValidUntil }),
+    };
+  }
+
+  async test(endpointId: string, options?: RequestOptions) {
+    const response = await this.transport.request<unknown>({
+      method: "POST",
+      path: `/v1/webhooks/${encodeURIComponent(endpointId)}/test`,
+      body: {},
+      ...(options === undefined ? {} : { options }),
+    });
+    return parseResponse(webhookReplayResponseSchema, response).data;
+  }
+
+  async replay(
+    eventId: string,
+    endpointId: string,
+    options?: RequestOptions,
+  ) {
+    const response = await this.transport.request<unknown>({
+      method: "POST",
+      path: `/v1/webhook-events/${encodeURIComponent(eventId)}/replay`,
+      body: { endpointId },
+      ...(options === undefined ? {} : { options }),
+    });
+    return parseResponse(webhookReplayResponseSchema, response).data;
+  }
+}
+
 export interface SimpleMailerOptions extends FetchTransportOptions {
   transport?: never;
 }
@@ -129,6 +242,7 @@ export class SimpleMailer {
   readonly messages: MessagesClient;
   readonly senders: SendersClient;
   readonly templates: TemplatesClient;
+  readonly webhooks: WebhooksClient;
   readonly transport: HttpTransport;
 
   constructor(options: SimpleMailerOptions | SimpleMailerTransportOptions) {
@@ -137,5 +251,6 @@ export class SimpleMailer {
     this.messages = new MessagesClient(this.transport);
     this.senders = new SendersClient(this.transport);
     this.templates = new TemplatesClient(this.transport);
+    this.webhooks = new WebhooksClient(this.transport);
   }
 }
