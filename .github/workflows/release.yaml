@@ -30,6 +30,8 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
           registry-url: https://registry.npmjs.org
+      - name: Install npm with trusted-publishing support
+        run: npm install --global npm@11.15.0
       - run: pnpm install --frozen-lockfile
       - run: pnpm db:generate
       - run: pnpm --filter dashboard openapi:generate
@@ -44,6 +46,5 @@ jobs:
         run: node scripts/check-package-versions.mjs
       - name: Publish SDK
         if: ${{ inputs.publish }}
-        run: pnpm --filter @bencetotht/simplemailer publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        working-directory: packages/sdk
+        run: npm publish --access public

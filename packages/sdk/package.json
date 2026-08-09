@@ -2,6 +2,15 @@
   "name": "@bencetotht/simplemailer",
   "version": "0.1.0",
   "description": "Type-safe, server-side SDK for the SimpleMailer API",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bencetotht/simplemailer.git",
+    "directory": "packages/sdk"
+  },
+  "homepage": "https://github.com/bencetotht/simplemailer#readme",
+  "bugs": {
+    "url": "https://github.com/bencetotht/simplemailer/issues"
+  },
   "type": "module",
   "types": "./dist/index.d.ts",
   "module": "./dist/index.js",
