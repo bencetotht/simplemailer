@@ -1,6 +1,8 @@
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 
+/** Runtime validators, public API types, and generated JSON schemas. */
+
 export const API_VERSION = "v1";
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
 export const API_KEY_SCOPES = [

@@ -26,7 +26,7 @@ import {
   type WebhookEndpoint,
   type ApiKeySummary,
   type CreateApiKey,
-} from "@simplemailer/contracts";
+} from "./contracts.js";
 import { SimpleMailerError } from "./errors.js";
 import {
   FetchTransport,

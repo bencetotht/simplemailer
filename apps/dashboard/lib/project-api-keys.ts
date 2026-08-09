@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { ApiKeyScope } from "@simplemailer/contracts";
+import type { ApiKeyScope } from "@simplemailer/sdk/contracts";
 import { Prisma } from "database";
 import { prisma } from "@/lib/db";
 import { generateApiKey } from "@/lib/api-keys";

@@ -1,13 +1,14 @@
 import { readFile } from "node:fs/promises";
 import { dirname, extname, resolve } from "node:path";
-import { mailerManifestSchema, type MailerManifest } from "@simplemailer/contracts";
 import {
+  mailerManifestSchema,
   SimpleMailer,
   SimpleMailerError,
   applyMailerSync,
   planMailerSync,
   resolveMailerDefinition,
   type ResolvedMailerDefinition,
+  type MailerManifest,
   type SyncPlan,
 } from "@simplemailer/sdk";
 import { parse as parseYaml } from "yaml";

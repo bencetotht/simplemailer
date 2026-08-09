@@ -27,7 +27,7 @@ try {
   await mkdir(tarballRoot, { recursive: true });
   await mkdir(consumerRoot, { recursive: true });
 
-  const packages = ["contracts", "sdk", "cli"];
+  const packages = ["sdk", "cli"];
   const tarballs = [];
   for (const packageName of packages) {
     const output = run(
@@ -66,10 +66,10 @@ try {
   await writeFile(
     join(consumerRoot, "smoke.mjs"),
     [
-      'import { API_VERSION } from "@simplemailer/contracts";',
       'import { SimpleMailer, defineMailer } from "@simplemailer/sdk";',
+      'import { API_VERSION } from "@simplemailer/sdk/contracts";',
       'import { redactPlan } from "@simplemailer/cli";',
-      'if (API_VERSION !== "v1") throw new Error("contracts import failed");',
+      'if (API_VERSION !== "v1") throw new Error("SDK contracts export failed");',
       'const client = new SimpleMailer({',
       '  transport: { request: async () => ({ data: [] }) },',
       '});',

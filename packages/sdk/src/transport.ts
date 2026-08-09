@@ -1,4 +1,4 @@
-import { apiErrorSchema } from "@simplemailer/contracts";
+import { apiErrorSchema } from "./contracts.js";
 import { SimpleMailerError } from "./errors.js";
 import { SDK_USER_AGENT } from "./version.js";
 

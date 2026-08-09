@@ -844,12 +844,12 @@ Update:
 
 In progress as of 2026-07-26:
 
-- Added publishable ESM workspace packages for `@simplemailer/contracts`,
-  `@simplemailer/sdk`, and `@simplemailer/cli`, targeting Node.js 22–24 with
+- Added publishable ESM workspace packages for `@simplemailer/sdk` and
+  `@simplemailer/cli`, targeting Node.js 22–24 with
   declaration/source-map output and strict TypeScript settings, including
   `exactOptionalPropertyTypes`.
 - Moved the implemented `/v1/messages` request, response, status, and error
-  definitions into runtime Zod contracts. Dashboard validation, SDK types, and
+  definitions into SDK-exported runtime Zod contracts. Dashboard validation, SDK types, and
   generated OpenAPI schemas now consume those shared definitions.
 - Implemented the server-only SDK message client with configurable timeouts,
   abort signals, injectable transports, an explicit user agent, validated

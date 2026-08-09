@@ -1,5 +1,10 @@
 # `@simplemailer/cli`
 
+The CLI is the configuration-as-code interface for SimpleMailer. It lets teams
+review sender and template changes in source control, detect drift in CI, and
+apply the same configuration consistently across environments without using
+the dashboard or writing an SDK script.
+
 ```bash
 simplemailer validate --config simplemailer.yaml
 simplemailer diff --config simplemailer.yaml --json

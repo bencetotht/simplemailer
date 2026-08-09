@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 
-const packageDirectories = ["packages/contracts", "packages/sdk", "packages/cli"];
+const packageDirectories = ["packages/sdk", "packages/cli"];
 
 for (const directory of packageDirectories) {
   const manifest = JSON.parse(

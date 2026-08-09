@@ -7,7 +7,7 @@ import {
   type Template,
   type UpsertSender,
   type UpsertTemplate,
-} from "@simplemailer/contracts";
+} from "./contracts.js";
 import type { SimpleMailer } from "./client.js";
 
 export function defineMailer<const T extends MailerManifest>(manifest: T): T {

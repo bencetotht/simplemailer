@@ -1,6 +1,6 @@
 import {
   createWebhookEndpointSchema,
-} from "@simplemailer/contracts";
+} from "@simplemailer/sdk/contracts";
 import { NextRequest } from "next/server";
 import { apiError, JSON_LIMITS, jsonResponse, readJsonBody } from "@/lib/http";
 import { requireProjectScope } from "@/lib/v1-auth";

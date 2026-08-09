@@ -9,8 +9,7 @@ The project is under active stabilization. It is suitable for development and ev
 - `apps/dashboard`: Next.js dashboard and HTTP API
 - `apps/worker`: long-running RabbitMQ consumer and SMTP executor
 - `packages/database`: Prisma schema, client, and migrations
-- `packages/contracts`: shared `/v1` runtime validators, types, and OpenAPI schemas
-- `packages/sdk`: ESM-only, server-side TypeScript SDK and declarative sync engine
+- `packages/sdk`: ESM-only server SDK, shared `/v1` contracts, and declarative sync engine
 - `packages/cli`: JSON/YAML manifest validation, diff, and sync commands
 - PostgreSQL: configuration, bulk schedules, delivery state, and worker heartbeats
 - RabbitMQ: ready jobs, retry delivery, and dead letters
@@ -184,14 +183,15 @@ version; activation is a separate, idempotent operation. MJML can be stored as
 a managed source, but compiler sandboxing and sending through managed templates
 remain pending.
 
-The SDK, contracts, and CLI are currently workspace packages. Their release
+The SDK and CLI are currently workspace packages. Their release
 workflow is manual and documented in `RELEASING.md`; they are not installable
 from npm until the first release is explicitly published.
 
 Legacy protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put
 either credential in a `NEXT_PUBLIC_*` environment variable.
 
-`@simplemailer/contracts` owns shared `/v1` validators and JSON schemas.
+`@simplemailer/sdk/contracts` exports the shared `/v1` validators, types, and
+JSON schemas.
 `apps/dashboard/lib/legacy-contract.ts` composes those with the compatibility
 API to produce the current OpenAPI document. Generate the checked-in artifact
 with:

@@ -42,11 +42,6 @@ jobs:
       - name: Confirm versions are not already published
         if: ${{ inputs.publish }}
         run: node scripts/check-package-versions.mjs
-      - name: Publish contracts
-        if: ${{ inputs.publish }}
-        run: pnpm --filter @simplemailer/contracts publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: Publish SDK
         if: ${{ inputs.publish }}
         run: pnpm --filter @simplemailer/sdk publish --access public --no-git-checks

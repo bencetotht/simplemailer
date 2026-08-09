@@ -3,7 +3,7 @@ import {
   createInlineMessageSchema,
   mailerManifestSchema,
   publicJsonSchemas,
-} from "./index.js";
+} from "./contracts.js";
 
 describe("public contracts", () => {
   test("normalizes omitted tags", () => {

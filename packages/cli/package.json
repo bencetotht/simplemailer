@@ -29,7 +29,6 @@
     "node": ">=22 <25"
   },
   "dependencies": {
-    "@simplemailer/contracts": "workspace:^",
     "@simplemailer/sdk": "workspace:^",
     "yaml": "^2.8.1"
   },

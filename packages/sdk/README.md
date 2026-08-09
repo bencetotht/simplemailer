@@ -1,7 +1,11 @@
 # `@simplemailer/sdk`
 
 Server-side, ESM-only TypeScript SDK for SimpleMailer. It supports Node.js
-22–24 and has no framework dependency.
+22–24 and has no framework dependency. It also exports the runtime Zod
+validators, public API types, and JSON schemas shared with the server.
+
+Consumers that only need those definitions can import them from the dedicated
+`@simplemailer/sdk/contracts` subpath without installing another package.
 
 ```ts
 import { SimpleMailer } from "@simplemailer/sdk";

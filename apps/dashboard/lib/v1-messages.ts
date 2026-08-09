@@ -2,7 +2,7 @@ import { createHash, randomUUID } from "crypto";
 import {
   createInlineMessageSchema,
   type ParsedCreateInlineMessage,
-} from "@simplemailer/contracts";
+} from "@simplemailer/sdk/contracts";
 import { ArtifactFormat, Prisma, SenderStatus, Status } from "database";
 import { recordMessageWebhookEvent } from "database/webhooks";
 import { prisma } from "@/lib/db";
