@@ -8,9 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "pretest": "pnpm --filter @simplemailer/contracts build",
     "test": "vitest run",
+    "preopenapi:generate": "pnpm --filter @simplemailer/contracts build",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "project:bootstrap": "tsx scripts/bootstrap-project.ts",
+    "control-plane:smoke": "tsx scripts/control-plane-smoke.ts",
     "clean": "rm -rf .next"
   },
   "dependencies": {

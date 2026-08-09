@@ -52,6 +52,9 @@ export const openApiDocument = {
   security: protectedSecurity,
   tags: [
     { name: "Messages" },
+    { name: "API Keys" },
+    { name: "Senders" },
+    { name: "Managed Templates" },
     { name: "Webhooks" },
     { name: "Mail" },
     { name: "Accounts" },
@@ -93,6 +96,176 @@ export const openApiDocument = {
           "401": response("Missing, invalid, expired, revoked, or inactive project key"),
           "403": response("Project key lacks messages:read"),
           "404": response("Message not found in the authenticated project"),
+        },
+      },
+    },
+    "/v1/api-keys": {
+      get: {
+        tags: ["API Keys"],
+        summary: "List project API keys without secret hashes",
+        security: [{ ProjectBearerKey: ["keys:read"] }],
+        responses: {
+          "200": response("Project API keys", ref("ApiKeyListResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks keys:read"),
+        },
+      },
+      post: {
+        tags: ["API Keys"],
+        summary: "Create a scoped project API key",
+        description: "The generated credential is returned once and is never stored in plaintext.",
+        security: [{ ProjectBearerKey: ["keys:write"] }],
+        requestBody: { required: true, content: json(ref("CreateApiKeyRequest")) },
+        responses: {
+          "201": response("API key created; secret shown once", ref("ApiKeyCreateResponse")),
+          "400": response("Invalid scopes, expiry, or request"),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks keys:write"),
+          "413": standardErrors["413"],
+        },
+      },
+    },
+    "/v1/api-keys/{id}": {
+      delete: {
+        tags: ["API Keys"],
+        summary: "Revoke a project API key",
+        description: "The credential used for this request cannot revoke itself.",
+        security: [{ ProjectBearerKey: ["keys:write"] }],
+        parameters: [idParameter],
+        responses: {
+          "200": response("API key revoked", {
+            type: "object",
+            required: ["data"],
+            properties: {
+              data: {
+                type: "object",
+                required: ["id", "revoked"],
+                properties: {
+                  id: { type: "string" },
+                  revoked: { const: true },
+                },
+              },
+            },
+          }),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks keys:write"),
+          "404": response("API key not found in the authenticated project"),
+          "409": response("The request attempted to revoke its own credential"),
+        },
+      },
+    },
+    "/v1/senders": {
+      get: {
+        tags: ["Senders"],
+        summary: "List project sender aliases",
+        security: [{ ProjectBearerKey: ["senders:read"] }],
+        responses: {
+          "200": response("Project sender aliases", ref("SenderListResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks senders:read"),
+        },
+      },
+    },
+    "/v1/senders/{alias}": {
+      put: {
+        tags: ["Senders"],
+        summary: "Create or update a project sender alias",
+        description:
+          "Credential references name a server-side environment variable whose value is an existing delivery account ID or username. The value is resolved only by SimpleMailer and is never returned.",
+        security: [{ ProjectBearerKey: ["senders:write"] }],
+        parameters: [{
+          in: "path",
+          name: "alias",
+          required: true,
+          schema: { type: "string", maxLength: 128 },
+        }],
+        requestBody: { required: true, content: json(ref("UpsertSenderRequest")) },
+        responses: {
+          "200": response("Sender alias created or updated", ref("SenderResponse")),
+          "400": response("Invalid request or missing credential reference"),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks senders:write"),
+          "404": response("Referenced delivery account does not exist"),
+          "409": response("Path and body aliases do not match"),
+          "413": standardErrors["413"],
+          "422": response("Credential environment reference is not configured on the server"),
+        },
+      },
+    },
+    "/v1/templates": {
+      get: {
+        tags: ["Managed Templates"],
+        summary: "List project managed templates and immutable versions",
+        security: [{ ProjectBearerKey: ["templates:read"] }],
+        responses: {
+          "200": response("Project managed templates", ref("TemplateListResponse")),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks templates:read"),
+        },
+      },
+    },
+    "/v1/templates/{name}": {
+      put: {
+        tags: ["Managed Templates"],
+        summary: "Idempotently create an immutable managed-template version",
+        description:
+          "Identical source and metadata reuse the existing content digest and version.",
+        security: [{ ProjectBearerKey: ["templates:write"] }],
+        parameters: [{
+          in: "path",
+          name: "name",
+          required: true,
+          schema: { type: "string", maxLength: 128 },
+        }],
+        requestBody: { required: true, content: json(ref("UpsertTemplateRequest")) },
+        responses: {
+          "200": response("Template version created or reused", ref("TemplateUpsertResponse")),
+          "400": standardErrors["400"],
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks templates:write"),
+          "409": response("Path and body template names do not match"),
+          "413": standardErrors["413"],
+        },
+      },
+    },
+    "/v1/templates/{name}/versions/{version}/activate": {
+      post: {
+        tags: ["Managed Templates"],
+        summary: "Activate an immutable managed-template version",
+        security: [{ ProjectBearerKey: ["templates:write"] }],
+        parameters: [
+          {
+            in: "path",
+            name: "name",
+            required: true,
+            schema: { type: "string" },
+          },
+          {
+            in: "path",
+            name: "version",
+            required: true,
+            schema: { type: "string", pattern: "^tplv_" },
+          },
+        ],
+        responses: {
+          "200": response("Template version activated", {
+            type: "object",
+            required: ["data"],
+            properties: {
+              data: {
+                type: "object",
+                required: ["name", "version", "active"],
+                properties: {
+                  name: { type: "string" },
+                  version: { type: "string" },
+                  active: { const: true },
+                },
+              },
+            },
+          }),
+          "401": response("Invalid or inactive project key"),
+          "403": response("Project key lacks templates:write"),
+          "404": response("Template version not found in the authenticated project"),
         },
       },
     },
@@ -490,6 +663,10 @@ export const openApiDocument = {
     },
     schemas: {
       ErrorResponse: publicJsonSchemas.ApiError,
+      ApiKeySummary: publicJsonSchemas.ApiKeySummary,
+      ApiKeyListResponse: publicJsonSchemas.ApiKeyListResponse,
+      CreateApiKeyRequest: publicJsonSchemas.CreateApiKeyRequest,
+      ApiKeyCreateResponse: publicJsonSchemas.ApiKeyCreateResponse,
       SuccessResponse: {
         type: "object",
         required: ["success"],

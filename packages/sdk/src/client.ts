@@ -8,6 +8,9 @@ import {
   upsertSenderSchema,
   upsertTemplateSchema,
   createWebhookEndpointSchema,
+  createApiKeySchema,
+  apiKeyCreateResponseSchema,
+  apiKeyListResponseSchema,
   updateWebhookEndpointSchema,
   webhookEndpointListResponseSchema,
   webhookEndpointResponseSchema,
@@ -21,6 +24,8 @@ import {
   type CreateWebhookEndpoint,
   type UpdateWebhookEndpoint,
   type WebhookEndpoint,
+  type ApiKeySummary,
+  type CreateApiKey,
 } from "@simplemailer/contracts";
 import { SimpleMailerError } from "./errors.js";
 import {
@@ -62,6 +67,44 @@ export class MessagesClient {
       ...(options === undefined ? {} : { options }),
     });
     return parseResponse(messageResponseSchema, response).data;
+  }
+}
+
+export class ApiKeysClient {
+  constructor(private readonly transport: HttpTransport) {}
+
+  async list(options?: RequestOptions): Promise<ApiKeySummary[]> {
+    const response = await this.transport.request<unknown>({
+      method: "GET",
+      path: "/v1/api-keys",
+      ...(options === undefined ? {} : { options }),
+    });
+    return parseResponse(apiKeyListResponseSchema, response).data;
+  }
+
+  async create(
+    input: CreateApiKey,
+    options?: RequestOptions,
+  ): Promise<{ key: ApiKeySummary; secret: string }> {
+    const body = createApiKeySchema.parse(input);
+    const response = parseResponse(
+      apiKeyCreateResponseSchema,
+      await this.transport.request<unknown>({
+        method: "POST",
+        path: "/v1/api-keys",
+        body,
+        ...(options === undefined ? {} : { options }),
+      }),
+    );
+    return { key: response.data, secret: response.secret };
+  }
+
+  async revoke(id: string, options?: RequestOptions): Promise<void> {
+    await this.transport.request<unknown>({
+      method: "DELETE",
+      path: `/v1/api-keys/${encodeURIComponent(id)}`,
+      ...(options === undefined ? {} : { options }),
+    });
   }
 }
 
@@ -243,6 +286,7 @@ export class SimpleMailer {
   readonly senders: SendersClient;
   readonly templates: TemplatesClient;
   readonly webhooks: WebhooksClient;
+  readonly apiKeys: ApiKeysClient;
   readonly transport: HttpTransport;
 
   constructor(options: SimpleMailerOptions | SimpleMailerTransportOptions) {
@@ -252,5 +296,6 @@ export class SimpleMailer {
     this.senders = new SendersClient(this.transport);
     this.templates = new TemplatesClient(this.transport);
     this.webhooks = new WebhooksClient(this.transport);
+    this.apiKeys = new ApiKeysClient(this.transport);
   }
 }

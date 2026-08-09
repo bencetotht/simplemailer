@@ -40,6 +40,8 @@ model Project {
   webhookEndpoints   WebhookEndpoint[]
   webhookEvents      WebhookEvent[]
   auditEvents        AuditEvent[]
+  managedTemplates   ManagedTemplate[]
+  managedTemplateVersions ManagedTemplateVersion[]
 }
 
 model ApiKey {
@@ -93,9 +95,45 @@ model ContentArtifact {
   createdAt  DateTime       @default(now())
   htmlMessages Message[]    @relation("MessageHtmlArtifact")
   textMessages Message[]    @relation("MessageTextArtifact")
+  managedTemplateVersions ManagedTemplateVersion[]
 
   @@unique([projectId, digest, format])
   @@index([projectId, createdAt])
+}
+
+model ManagedTemplate {
+  id              String   @id
+  projectId       String
+  project         Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  activeVersionId String?  @unique
+  activeVersion   ManagedTemplateVersion? @relation("ActiveManagedTemplateVersion", fields: [activeVersionId], references: [id], onDelete: SetNull)
+  versions        ManagedTemplateVersion[] @relation("ManagedTemplateVersions")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([projectId, name])
+  @@index([projectId, updatedAt])
+}
+
+model ManagedTemplateVersion {
+  id             String          @id
+  projectId      String
+  project        Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  templateId     String
+  template       ManagedTemplate @relation("ManagedTemplateVersions", fields: [templateId], references: [id], onDelete: Cascade)
+  digest         String
+  format         ArtifactFormat
+  sourceArtifactId String
+  sourceArtifact ContentArtifact @relation(fields: [sourceArtifactId], references: [id])
+  subject        String?
+  variableSchema Json?
+  activeFor      ManagedTemplate? @relation("ActiveManagedTemplateVersion")
+  createdAt      DateTime         @default(now())
+
+  @@unique([templateId, digest])
+  @@index([projectId, createdAt])
+  @@index([sourceArtifactId])
 }
 
 model Message {

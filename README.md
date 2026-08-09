@@ -137,6 +137,15 @@ workers. The application rejects local/private targets and rechecks DNS before
 delivery, but infrastructure egress controls remain the authoritative SSRF
 boundary.
 
+Control-plane keys with `keys:read` and `keys:write` can list, create, and
+revoke project credentials through `/v1/api-keys`. New secrets are returned
+once, and a key cannot revoke itself. Sender aliases can be listed and
+reconciled through `/v1/senders` with `senders:read`/`senders:write`. For sender
+creation, `credential.env` names an environment variable configured on the
+SimpleMailer server; its value must be an existing SMTP account ID or unique
+account username. The environment-variable value is resolved server-side and
+is never returned through the API.
+
 TypeScript server applications can use the workspace SDK:
 
 ```ts
@@ -169,9 +178,15 @@ pnpm --filter @simplemailer/cli exec simplemailer validate \
   --config simplemailer.yaml
 ```
 
-The `diff` and `sync` commands target the planned project-scoped sender and
-managed-template management endpoints. Until those Phase 2 endpoints land,
-local validation is usable but remote reconciliation is not.
+The `diff` and `sync` commands reconcile sender aliases and immutable managed
+template versions. Identical template source and metadata reuse an existing
+version; activation is a separate, idempotent operation. MJML can be stored as
+a managed source, but compiler sandboxing and sending through managed templates
+remain pending.
+
+The SDK, contracts, and CLI are currently workspace packages. Their release
+workflow is manual and documented in `RELEASING.md`; they are not installable
+from npm until the first release is explicitly published.
 
 Legacy protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put
 either credential in a `NEXT_PUBLIC_*` environment variable.

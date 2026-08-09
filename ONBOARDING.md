@@ -9,11 +9,14 @@ implemented yet.
 The current API is documented in `README.md` and at `/api/docs`. The work needed
 to reach the target described here is tracked in `API_UPGRADE_PLAN.md`.
 
-Projects, scoped keys, sender aliases, inline `/v1/messages`, and the initial
-`@simplemailer/sdk` message client are implemented. The SDK also contains a
-typed declarative diff/sync engine, and the CLI can validate JSON/YAML manifests
-locally. Project-scoped sender/template management endpoints, managed template
-versions, MJML, and remote reconciliation are still target behavior. The first
+Projects, scoped key creation/revocation, sender aliases and sender
+reconciliation, inline `/v1/messages`, and the initial `@simplemailer/sdk`
+message client are implemented. The SDK also contains a typed declarative
+diff/sync engine, and the CLI can validate JSON/YAML manifests locally.
+Project-scoped immutable managed template versions and template
+reconciliation are implemented. Sending through a managed template, MJML
+compiler sandboxing, and variable-schema enforcement are still target
+behavior. The first
 signed webhook slice is implemented with project-scoped endpoint management,
 replay-safe event IDs, encrypted/rotatable secrets, and leased at-least-once
 delivery.

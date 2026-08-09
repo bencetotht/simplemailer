@@ -10,6 +10,7 @@
     "lint": "turbo lint",
     "type-check": "turbo type-check",
     "test": "turbo test",
+    "package:smoke": "node scripts/package-smoke.mjs",
     "db:generate": "turbo db:generate",
     "db:migrate": "turbo db:migrate",
     "clean": "turbo clean"

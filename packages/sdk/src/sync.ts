@@ -126,8 +126,8 @@ export async function planMailerSync(
   desired: ResolvedMailerDefinition,
 ): Promise<SyncPlan> {
   const [senders, templates] = await Promise.all([
-    client.senders.list(),
-    client.templates.list(),
+    desired.senders.length > 0 ? client.senders.list() : Promise.resolve([]),
+    desired.templates.length > 0 ? client.templates.list() : Promise.resolve([]),
   ]);
   return diffMailerDefinition(desired, { senders, templates });
 }

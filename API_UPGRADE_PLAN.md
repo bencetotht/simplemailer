@@ -665,9 +665,9 @@ In progress as of 2026-07-26:
   from persisted content. `pnpm type-check`, `pnpm lint`, `pnpm test`, and
   `pnpm build` pass.
 - Still pending in Phase 2: object-store artifact spillover, MJML compiler
-  safety, managed template aliases/versions and variable schemas, message
+  safety, managed-template sending and variable-schema enforcement, message
   listing, legacy-route convergence, project-scoped bulk orchestration,
-  management endpoints/rotation workflows, and broader boundary/race tests.
+  overlapping API-key rotation workflows, and broader boundary/race tests.
 
 ---
 
@@ -865,10 +865,11 @@ In progress as of 2026-07-26:
   diff uses meaningful exit codes, and remote-only resources are not deleted.
   Unit tests cover HTTP behavior, fake transports, schema validation,
   deterministic diffing, activation reuse, YAML loading, and redaction.
-- Project-scoped sender and managed-template management endpoints remain a
-  Phase 2 dependency. The SDK/CLI contract is in place, but remote `diff` and
-  `sync` cannot complete against the current server until those endpoints and
-  immutable template models are implemented.
+- Completed the former project-scoped management dependency: sender aliases
+  and immutable managed-template versions now have scoped
+  list/upsert/activation endpoints, so remote `diff` and `sync` can complete.
+  Sending through managed templates and MJML compiler safety remain Phase 2
+  work.
 
 ---
 

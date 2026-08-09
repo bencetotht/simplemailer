@@ -3,6 +3,20 @@ import { zodToJsonSchema } from "zod-to-json-schema";
 
 export const API_VERSION = "v1";
 export const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
+export const API_KEY_SCOPES = [
+  "messages:send",
+  "messages:read",
+  "senders:read",
+  "senders:write",
+  "templates:read",
+  "templates:write",
+  "webhooks:read",
+  "webhooks:write",
+  "webhooks:replay",
+  "keys:read",
+  "keys:write",
+] as const;
+export const apiKeyScopeSchema = z.enum(API_KEY_SCOPES);
 export const MESSAGE_STATUS_VALUES = [
   "ENQUEUE_PENDING",
   "QUEUED",
@@ -135,6 +149,38 @@ export const apiErrorSchema = z
     details: z.unknown().optional(),
   })
   .passthrough();
+
+export const apiKeySummarySchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    prefix: z.string().length(16),
+    scopes: z.array(apiKeyScopeSchema),
+    expiresAt: z.string().datetime().nullable(),
+    lastUsedAt: z.string().datetime().nullable(),
+    revokedAt: z.string().datetime().nullable(),
+    createdAt: z.string().datetime(),
+  })
+  .strict();
+export const apiKeyListResponseSchema = z
+  .object({ data: z.array(apiKeySummarySchema) })
+  .strict();
+export const createApiKeySchema = z
+  .object({
+    name: z.string().trim().min(1).max(128),
+    scopes: z.array(apiKeyScopeSchema).min(1).refine(
+      (scopes) => new Set(scopes).size === scopes.length,
+      "API key scopes must be unique",
+    ),
+    expiresAt: z.string().datetime().optional(),
+  })
+  .strict();
+export const apiKeyCreateResponseSchema = z
+  .object({
+    data: apiKeySummarySchema,
+    secret: z.string().startsWith("sm_live_"),
+  })
+  .strict();
 
 export const senderStatusSchema = z.enum(["ACTIVE", "DISABLED"]);
 export const senderSchema = z
@@ -270,6 +316,9 @@ export type CreateWebhookEndpoint = z.infer<typeof createWebhookEndpointSchema>;
 export type UpdateWebhookEndpoint = z.infer<typeof updateWebhookEndpointSchema>;
 export type WebhookEndpoint = z.infer<typeof webhookEndpointSchema>;
 export type ApiErrorResponse = z.infer<typeof apiErrorSchema>;
+export type ApiKeyScope = z.infer<typeof apiKeyScopeSchema>;
+export type ApiKeySummary = z.infer<typeof apiKeySummarySchema>;
+export type CreateApiKey = z.infer<typeof createApiKeySchema>;
 export type Sender = z.infer<typeof senderSchema>;
 export type UpsertSender = z.infer<typeof upsertSenderSchema>;
 export type Template = z.infer<typeof templateSchema>;
@@ -288,6 +337,10 @@ function openApiSchema(schema: z.ZodTypeAny): Record<string, unknown> {
 
 export const publicJsonSchemas = {
   ApiError: openApiSchema(apiErrorSchema),
+  ApiKeySummary: openApiSchema(apiKeySummarySchema),
+  ApiKeyListResponse: openApiSchema(apiKeyListResponseSchema),
+  CreateApiKeyRequest: openApiSchema(createApiKeySchema),
+  ApiKeyCreateResponse: openApiSchema(apiKeyCreateResponseSchema),
   CreateInlineMessageRequest: openApiSchema(createInlineMessageSchema),
   MessageSummary: openApiSchema(messageSummarySchema),
   MessageResponse: openApiSchema(messageResponseSchema),

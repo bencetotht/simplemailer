@@ -37,6 +37,7 @@ jobs:
       - run: pnpm type-check
       - run: pnpm test
       - run: pnpm build
+      - run: pnpm package:smoke
 
   migration-smoke-test:
     runs-on: ubuntu-latest
@@ -70,3 +71,4 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter database db:deploy
       - run: pnpm --filter database db:generate
+      - run: pnpm --filter dashboard control-plane:smoke
