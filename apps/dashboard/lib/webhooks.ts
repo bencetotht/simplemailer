@@ -1,6 +1,6 @@
 import { isIP } from "node:net";
 import { randomBytes, randomUUID } from "node:crypto";
-import type { WebhookEventName } from "@simplemailer/sdk/contracts";
+import type { WebhookEventName } from "@bencetotht/simplemailer/contracts";
 import {
   Prisma,
   WebhookDeliveryStatus,

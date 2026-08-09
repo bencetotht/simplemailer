@@ -1,5 +1,5 @@
 import { prisma } from "database";
-import { apiKeyScopeSchema } from "@simplemailer/sdk/contracts";
+import { apiKeyScopeSchema } from "@bencetotht/simplemailer/contracts";
 import { generateApiKey } from "../lib/api-keys";
 
 function required(name: string): string {

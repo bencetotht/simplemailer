@@ -1,12 +1,10 @@
-# Package releases
+# SDK releases
 
-The public packages are versioned and released together:
+The only public npm package is:
 
-- `@simplemailer/sdk`
-- `@simplemailer/cli`
+- `@bencetotht/simplemailer`
 
-Before a release, update both package versions and ensure the CLI workspace
-dependency range still describes the intended compatible SDK.
+Before a release, update the SDK package version.
 Run the complete local verification:
 
 ```bash
@@ -19,12 +17,13 @@ pnpm build
 pnpm package:smoke
 ```
 
-`package:smoke` packs both packages, installs the tarballs in a temporary
+`package:smoke` packs the SDK, installs the tarball in a temporary
 external consumer, verifies imports, and rejects unresolved `workspace:`
 dependencies.
 
-Publishing is intentionally manual. Dispatch the `release-packages` workflow
+Publishing is intentionally manual. Dispatch the `release-sdk` workflow
 with `publish=false` for a release rehearsal. Use `publish=true` only after the
-repository `NPM_TOKEN` secret is configured and the package versions have been
+repository `NPM_TOKEN` secret is configured and the SDK version has been
 reviewed. The workflow refuses to publish a version already present in the npm
-registry and publishes the SDK followed by the CLI.
+registry and publishes the SDK. The CLI remains a private workspace tool and is
+never published.

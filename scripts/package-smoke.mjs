@@ -27,17 +27,14 @@ try {
   await mkdir(tarballRoot, { recursive: true });
   await mkdir(consumerRoot, { recursive: true });
 
-  const packages = ["sdk", "cli"];
-  const tarballs = [];
-  for (const packageName of packages) {
-    const output = run(
-      "pnpm",
-      ["--filter", `@simplemailer/${packageName}`, "pack", "--pack-destination", tarballRoot],
-    );
-    const filename = output.split("\n").at(-1);
-    if (!filename) throw new Error(`No tarball was produced for ${packageName}`);
-    tarballs.push(resolve(filename));
-  }
+  const packageName = "@bencetotht/simplemailer";
+  const output = run(
+    "pnpm",
+    ["--filter", packageName, "pack", "--pack-destination", tarballRoot],
+  );
+  const filename = output.split("\n").at(-1);
+  if (!filename) throw new Error(`No tarball was produced for ${packageName}`);
+  const tarball = resolve(filename);
 
   await writeFile(
     join(consumerRoot, "package.json"),
@@ -45,19 +42,9 @@ try {
       name: "simplemailer-package-smoke",
       private: true,
       type: "module",
-      dependencies: Object.fromEntries(
-        packages.map((packageName, index) => [
-          `@simplemailer/${packageName}`,
-          `file:${tarballs[index]}`,
-        ]),
-      ),
+      dependencies: { [packageName]: `file:${tarball}` },
       pnpm: {
-        overrides: Object.fromEntries(
-          packages.map((packageName, index) => [
-            `@simplemailer/${packageName}`,
-            `file:${tarballs[index]}`,
-          ]),
-        ),
+        overrides: { [packageName]: `file:${tarball}` },
       },
     }, null, 2)}\n`,
   );
@@ -66,30 +53,26 @@ try {
   await writeFile(
     join(consumerRoot, "smoke.mjs"),
     [
-      'import { SimpleMailer, defineMailer } from "@simplemailer/sdk";',
-      'import { API_VERSION } from "@simplemailer/sdk/contracts";',
-      'import { redactPlan } from "@simplemailer/cli";',
+      'import { SimpleMailer, defineMailer } from "@bencetotht/simplemailer";',
+      'import { API_VERSION } from "@bencetotht/simplemailer/contracts";',
       'if (API_VERSION !== "v1") throw new Error("SDK contracts export failed");',
       'const client = new SimpleMailer({',
       '  transport: { request: async () => ({ data: [] }) },',
       '});',
       'if (!client.messages || !client.webhooks) throw new Error("SDK import failed");',
       'defineMailer({ apiVersion: "simplemailer/v1", senders: [], templates: [] });',
-      'redactPlan({ operations: [], unchanged: { senders: [], templates: [] } });',
       'process.stdout.write("package smoke test passed\\n");',
       "",
     ].join("\n"),
   );
   run("node", ["smoke.mjs"], consumerRoot);
 
-  for (const tarball of tarballs) {
-    const manifest = JSON.parse(
-      run("tar", ["-xOf", tarball, "package/package.json"]),
-    );
-    for (const dependency of Object.values(manifest.dependencies ?? {})) {
-      if (String(dependency).startsWith("workspace:")) {
-        throw new Error(`${manifest.name} tarball contains an unresolved workspace dependency`);
-      }
+  const manifest = JSON.parse(
+    run("tar", ["-xOf", tarball, "package/package.json"]),
+  );
+  for (const dependency of Object.values(manifest.dependencies ?? {})) {
+    if (String(dependency).startsWith("workspace:")) {
+      throw new Error(`${manifest.name} tarball contains an unresolved workspace dependency`);
     }
   }
 

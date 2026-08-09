@@ -690,7 +690,7 @@ fully automatable without dashboard clicks.
 - Add examples for curl, TypeScript, and at least one non-JavaScript language.
 - Include authentication scopes and every error response in OpenAPI.
 
-## 3.2 Publish `@simplemailer/sdk`
+## 3.2 Publish `@bencetotht/simplemailer`
 
 Create a workspace package that can later be published independently.
 
@@ -838,14 +838,14 @@ Update:
 - Managed templates and senders can be validated, diffed, and synchronized from
   code without dashboard clicks.
 - A reference consumer demonstrates React Email rendered application-side.
-- SDK and CLI releases are reproducible and versioned.
+- SDK releases are reproducible and versioned; the CLI remains an internal tool.
 
 ## Phase 3 implementation notes
 
 In progress as of 2026-07-26:
 
-- Added publishable ESM workspace packages for `@simplemailer/sdk` and
-  `@simplemailer/cli`, targeting Node.js 22–24 with
+- Added a publishable ESM workspace package for `@bencetotht/simplemailer` and kept
+  `simplemailer-cli` private, targeting Node.js 22–24 with
   declaration/source-map output and strict TypeScript settings, including
   `exactOptionalPropertyTypes`.
 - Moved the implemented `/v1/messages` request, response, status, and error

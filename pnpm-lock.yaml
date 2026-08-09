@@ -23,6 +23,9 @@ importers:
       '@aws-sdk/client-s3':
         specifier: ^3.1086.0
         version: 3.1086.0
+      '@bencetotht/simplemailer':
+        specifier: workspace:^
+        version: link:../../packages/sdk
       '@radix-ui/react-dialog':
         specifier: ^1.1.15
         version: 1.1.19(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -38,9 +41,6 @@ importers:
       '@radix-ui/react-tooltip':
         specifier: ^1.2.8
         version: 1.2.12(@types/react-dom@19.2.3(@types/react@19.2.17))(@types/react@19.2.17)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
-      '@simplemailer/sdk':
-        specifier: workspace:^
-        version: link:../../packages/sdk
       amqplib:
         specifier: ^0.10.8
         version: 0.10.9
@@ -175,7 +175,7 @@ importers:
 
   packages/cli:
     dependencies:
-      '@simplemailer/sdk':
+      '@bencetotht/simplemailer':
         specifier: workspace:^
         version: link:../sdk
       yaml:

@@ -2,7 +2,7 @@ import {
   MAX_IDEMPOTENCY_KEY_LENGTH,
   MESSAGE_STATUS_VALUES,
   publicJsonSchemas,
-} from "@simplemailer/sdk/contracts";
+} from "@bencetotht/simplemailer/contracts";
 
 export const LEGACY_API_KEY_HEADER = "x-api-key";
 export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";

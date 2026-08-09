@@ -1,6 +1,6 @@
 import { SimpleMailer, type SimpleMailerOptions } from "./client.js";
 
-export const SIMPLEMAILER = Symbol.for("@simplemailer/sdk");
+export const SIMPLEMAILER = Symbol.for("@bencetotht/simplemailer");
 
 export interface NestValueProvider<T = SimpleMailer> {
   provide: string | symbol;

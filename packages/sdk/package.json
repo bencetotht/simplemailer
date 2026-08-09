@@ -1,5 +1,5 @@
 {
-  "name": "@simplemailer/sdk",
+  "name": "@bencetotht/simplemailer",
   "version": "0.1.0",
   "description": "Type-safe, server-side SDK for the SimpleMailer API",
   "type": "module",

@@ -148,7 +148,7 @@ is never returned through the API.
 TypeScript server applications can use the workspace SDK:
 
 ```ts
-import { SimpleMailer } from "@simplemailer/sdk";
+import { SimpleMailer } from "@bencetotht/simplemailer";
 
 const mailer = new SimpleMailer({
   baseUrl: process.env.SIMPLEMAILER_URL!,
@@ -173,7 +173,7 @@ idempotency key. It is not supported in browser bundles.
 Declarative JSON/YAML manifests can be checked locally:
 
 ```bash
-pnpm --filter @simplemailer/cli exec simplemailer validate \
+pnpm --filter simplemailer-cli exec simplemailer validate \
   --config simplemailer.yaml
 ```
 
@@ -183,14 +183,14 @@ version; activation is a separate, idempotent operation. MJML can be stored as
 a managed source, but compiler sandboxing and sending through managed templates
 remain pending.
 
-The SDK and CLI are currently workspace packages. Their release
-workflow is manual and documented in `RELEASING.md`; they are not installable
-from npm until the first release is explicitly published.
+The SDK is the only public npm package. Its release workflow is manual and
+documented in `RELEASING.md`; it is not installable from npm until the first
+release is explicitly published. The CLI remains a private workspace tool.
 
 Legacy protected endpoints expect `x-api-key: <DASHBOARD_API_KEY>`. Do not put
 either credential in a `NEXT_PUBLIC_*` environment variable.
 
-`@simplemailer/sdk/contracts` exports the shared `/v1` validators, types, and
+`@bencetotht/simplemailer/contracts` exports the shared `/v1` validators, types, and
 JSON schemas.
 `apps/dashboard/lib/legacy-contract.ts` composes those with the compatibility
 API to produce the current OpenAPI document. Generate the checked-in artifact

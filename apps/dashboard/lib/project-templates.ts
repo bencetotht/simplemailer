@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import type { UpsertTemplate } from "@simplemailer/sdk/contracts";
+import type { UpsertTemplate } from "@bencetotht/simplemailer/contracts";
 import { ArtifactFormat, Prisma } from "database";
 import { prisma } from "@/lib/db";
 

@@ -10,7 +10,7 @@ import {
   type ResolvedMailerDefinition,
   type MailerManifest,
   type SyncPlan,
-} from "@simplemailer/sdk";
+} from "@bencetotht/simplemailer";
 import { parse as parseYaml } from "yaml";
 
 export interface LoadedManifest {

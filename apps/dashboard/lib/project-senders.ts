@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { UpsertSender } from "@simplemailer/sdk/contracts";
+import type { UpsertSender } from "@bencetotht/simplemailer/contracts";
 import { Prisma } from "database";
 import { prisma } from "@/lib/db";
 

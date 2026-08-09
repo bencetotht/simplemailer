@@ -1,10 +1,10 @@
-name: release-packages
+name: release-sdk
 
 on:
   workflow_dispatch:
     inputs:
       publish:
-        description: Publish the current package versions to npm
+        description: Publish the current SDK version to npm
         required: true
         type: boolean
         default: false
@@ -44,11 +44,6 @@ jobs:
         run: node scripts/check-package-versions.mjs
       - name: Publish SDK
         if: ${{ inputs.publish }}
-        run: pnpm --filter @simplemailer/sdk publish --access public --no-git-checks
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-      - name: Publish CLI
-        if: ${{ inputs.publish }}
-        run: pnpm --filter @simplemailer/cli publish --access public --no-git-checks
+        run: pnpm --filter @bencetotht/simplemailer publish --access public --no-git-checks
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

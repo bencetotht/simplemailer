@@ -13,7 +13,7 @@ COPY packages/database/package.json ./packages/database/
 COPY packages/sdk/package.json ./packages/sdk/
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
     pnpm config set store-dir /pnpm/store && \
-    pnpm install --frozen-lockfile --filter dashboard --filter database --filter @simplemailer/sdk
+    pnpm install --frozen-lockfile --filter dashboard --filter database --filter @bencetotht/simplemailer
 
 FROM base AS builder
 ENV DATABASE_URL=postgresql://prisma:prisma@localhost:5432/prisma
@@ -26,7 +26,7 @@ COPY apps/dashboard ./apps/dashboard
 COPY packages/database ./packages/database
 COPY packages/sdk ./packages/sdk
 RUN pnpm --filter database db:generate
-RUN pnpm --filter @simplemailer/sdk build
+RUN pnpm --filter @bencetotht/simplemailer build
 RUN pnpm --filter dashboard build
 
 FROM base AS runner
