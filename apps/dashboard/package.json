@@ -8,13 +8,16 @@
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
+    "pretest": "pnpm --filter @bencetotht/simplemailer build",
     "test": "vitest run",
+    "preopenapi:generate": "pnpm --filter @bencetotht/simplemailer build",
     "openapi:generate": "tsx scripts/generate-openapi.ts",
     "project:bootstrap": "tsx scripts/bootstrap-project.ts",
+    "control-plane:smoke": "tsx scripts/control-plane-smoke.ts",
     "clean": "rm -rf .next"
   },
   "dependencies": {
-    "@simplemailer/contracts": "workspace:^",
+    "@bencetotht/simplemailer": "workspace:^",
     "@aws-sdk/client-s3": "^3.1086.0",
     "@radix-ui/react-dialog": "^1.1.15",
     "@radix-ui/react-dropdown-menu": "^2.1.16",

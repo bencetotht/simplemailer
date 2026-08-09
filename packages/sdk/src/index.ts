@@ -30,18 +30,4 @@ export {
   type SyncPlan,
 } from "./sync.js";
 export { SDK_VERSION } from "./version.js";
-export type {
-  ApiErrorResponse,
-  CreateInlineMessage,
-  MailerManifest,
-  MessageStatus,
-  MessageSummary,
-  Sender,
-  Template,
-  UpsertSender,
-  UpsertTemplate,
-  CreateWebhookEndpoint,
-  UpdateWebhookEndpoint,
-  WebhookEndpoint,
-  WebhookEventName,
-} from "@simplemailer/contracts";
+export * from "./contracts.js";

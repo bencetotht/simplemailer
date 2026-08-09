@@ -9,11 +9,14 @@ implemented yet.
 The current API is documented in `README.md` and at `/api/docs`. The work needed
 to reach the target described here is tracked in `API_UPGRADE_PLAN.md`.
 
-Projects, scoped keys, sender aliases, inline `/v1/messages`, and the initial
-`@simplemailer/sdk` message client are implemented. The SDK also contains a
-typed declarative diff/sync engine, and the CLI can validate JSON/YAML manifests
-locally. Project-scoped sender/template management endpoints, managed template
-versions, MJML, and remote reconciliation are still target behavior. The first
+Projects, scoped key creation/revocation, sender aliases and sender
+reconciliation, inline `/v1/messages`, and the initial `@bencetotht/simplemailer`
+message client are implemented. The SDK also contains a typed declarative
+diff/sync engine, and the CLI can validate JSON/YAML manifests locally.
+Project-scoped immutable managed template versions and template
+reconciliation are implemented. Sending through a managed template, MJML
+compiler sandboxing, and variable-schema enforcement are still target
+behavior. The first
 signed webhook slice is implemented with project-scoped endpoint management,
 replay-safe event IDs, encrypted/rotatable secrets, and leased at-least-once
 delivery.
@@ -80,7 +83,7 @@ topology.
 For a TypeScript application, the preferred client setup is:
 
 ```ts
-import { SimpleMailer } from "@simplemailer/sdk";
+import { SimpleMailer } from "@bencetotht/simplemailer";
 
 export const mailer = new SimpleMailer({
   baseUrl: process.env.SIMPLEMAILER_URL!,
@@ -541,7 +544,7 @@ or idempotency-conflict errors.
 Managed resources should be definable in a source-controlled manifest:
 
 ```ts
-import { defineMailer } from "@simplemailer/sdk/config";
+import { defineMailer } from "@bencetotht/simplemailer";
 import verifyEmailMjml from "./emails/verify-email.mjml";
 
 export default defineMailer({

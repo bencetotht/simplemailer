@@ -1,10 +1,14 @@
-# `@simplemailer/sdk`
+# `@bencetotht/simplemailer`
 
 Server-side, ESM-only TypeScript SDK for SimpleMailer. It supports Node.js
-22–24 and has no framework dependency.
+22–24 and has no framework dependency. It also exports the runtime Zod
+validators, public API types, and JSON schemas shared with the server.
+
+Consumers that only need those definitions can import them from the dedicated
+`@bencetotht/simplemailer/contracts` subpath without installing another package.
 
 ```ts
-import { SimpleMailer } from "@simplemailer/sdk";
+import { SimpleMailer } from "@bencetotht/simplemailer";
 
 const mailer = new SimpleMailer({
   baseUrl: process.env.SIMPLEMAILER_URL!,
@@ -51,9 +55,15 @@ Webhook mutation methods are not automatically retried; callers should inspect
 the resulting resource or event delivery before repeating a control-plane
 operation.
 
+Control-plane keys with `keys:read` and `keys:write` can create and revoke
+project credentials through `apiKeys`. A newly generated secret is returned
+only by `apiKeys.create`; store it before discarding the response. The API
+rejects revoking the credential used for the request so rotation cannot
+accidentally lock out the caller.
+
 ## NestJS
 
-The optional `@simplemailer/sdk/nest` entry point supplies a stable injection
+The optional `@bencetotht/simplemailer/nest` entry point supplies a stable injection
 token and provider helpers without making `@nestjs/common` a dependency:
 
 ```ts
@@ -61,7 +71,7 @@ import { Module } from "@nestjs/common";
 import {
   SIMPLEMAILER,
   createSimpleMailerProvider,
-} from "@simplemailer/sdk/nest";
+} from "@bencetotht/simplemailer/nest";
 
 @Module({
   providers: [
@@ -85,6 +95,7 @@ replace with a fake in unit tests.
 Manifests contain template paths and environment-variable secret references;
 resolved secret values are not emitted by diff plans.
 
-The management endpoints required to apply sender and managed-template plans
-are still being completed as part of the Phase 2/3 boundary. Message sending
-works against the current `/v1/messages` API.
+Sender and immutable managed-template plans can be diffed and applied against
+the current project-scoped management endpoints. Managed-template sending and
+safe MJML compilation remain separate server capabilities and are not implied
+by successful synchronization.

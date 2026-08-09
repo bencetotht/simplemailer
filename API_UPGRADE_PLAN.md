@@ -665,9 +665,9 @@ In progress as of 2026-07-26:
   from persisted content. `pnpm type-check`, `pnpm lint`, `pnpm test`, and
   `pnpm build` pass.
 - Still pending in Phase 2: object-store artifact spillover, MJML compiler
-  safety, managed template aliases/versions and variable schemas, message
+  safety, managed-template sending and variable-schema enforcement, message
   listing, legacy-route convergence, project-scoped bulk orchestration,
-  management endpoints/rotation workflows, and broader boundary/race tests.
+  overlapping API-key rotation workflows, and broader boundary/race tests.
 
 ---
 
@@ -690,7 +690,7 @@ fully automatable without dashboard clicks.
 - Add examples for curl, TypeScript, and at least one non-JavaScript language.
 - Include authentication scopes and every error response in OpenAPI.
 
-## 3.2 Publish `@simplemailer/sdk`
+## 3.2 Publish `@bencetotht/simplemailer`
 
 Create a workspace package that can later be published independently.
 
@@ -838,18 +838,18 @@ Update:
 - Managed templates and senders can be validated, diffed, and synchronized from
   code without dashboard clicks.
 - A reference consumer demonstrates React Email rendered application-side.
-- SDK and CLI releases are reproducible and versioned.
+- SDK releases are reproducible and versioned; the CLI remains an internal tool.
 
 ## Phase 3 implementation notes
 
 In progress as of 2026-07-26:
 
-- Added publishable ESM workspace packages for `@simplemailer/contracts`,
-  `@simplemailer/sdk`, and `@simplemailer/cli`, targeting Node.js 22–24 with
+- Added a publishable ESM workspace package for `@bencetotht/simplemailer` and kept
+  `simplemailer-cli` private, targeting Node.js 22–24 with
   declaration/source-map output and strict TypeScript settings, including
   `exactOptionalPropertyTypes`.
 - Moved the implemented `/v1/messages` request, response, status, and error
-  definitions into runtime Zod contracts. Dashboard validation, SDK types, and
+  definitions into SDK-exported runtime Zod contracts. Dashboard validation, SDK types, and
   generated OpenAPI schemas now consume those shared definitions.
 - Implemented the server-only SDK message client with configurable timeouts,
   abort signals, injectable transports, an explicit user agent, validated
@@ -865,10 +865,11 @@ In progress as of 2026-07-26:
   diff uses meaningful exit codes, and remote-only resources are not deleted.
   Unit tests cover HTTP behavior, fake transports, schema validation,
   deterministic diffing, activation reuse, YAML loading, and redaction.
-- Project-scoped sender and managed-template management endpoints remain a
-  Phase 2 dependency. The SDK/CLI contract is in place, but remote `diff` and
-  `sync` cannot complete against the current server until those endpoints and
-  immutable template models are implemented.
+- Completed the former project-scoped management dependency: sender aliases
+  and immutable managed-template versions now have scoped
+  list/upsert/activation endpoints, so remote `diff` and `sync` can complete.
+  Sending through managed templates and MJML compiler safety remain Phase 2
+  work.
 
 ---
 

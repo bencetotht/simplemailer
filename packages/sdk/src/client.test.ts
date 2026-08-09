@@ -97,6 +97,39 @@ describe("SimpleMailer", () => {
     });
   });
 
+  test("creates project API keys without hiding their one-time secret", async () => {
+    const requests: TransportRequest[] = [];
+    const key = {
+      id: "key_123",
+      name: "application",
+      prefix: "0123456789abcdef",
+      scopes: ["messages:send"],
+      expiresAt: null,
+      lastUsedAt: null,
+      revokedAt: null,
+      createdAt: "2026-07-29T12:00:00.000Z",
+    };
+    const transport: HttpTransport = {
+      async request<T>(request: TransportRequest): Promise<T> {
+        requests.push(request);
+        return {
+          data: key,
+          secret: "sm_live_0123456789abcdef.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        } as T;
+      },
+    };
+    const client = new SimpleMailer({ transport });
+
+    await expect(
+      client.apiKeys.create({ name: "application", scopes: ["messages:send"] }),
+    ).resolves.toMatchObject({ key, secret: expect.stringMatching(/^sm_live_/) });
+    expect(requests[0]).toMatchObject({
+      method: "POST",
+      path: "/v1/api-keys",
+      body: { name: "application", scopes: ["messages:send"] },
+    });
+  });
+
   test("returns structured errors with retry metadata", async () => {
     const fetch = vi.fn().mockResolvedValue(
       new Response(

@@ -63,6 +63,21 @@ describe("authoritative OpenAPI contract", () => {
     expect(checkedInSpec.paths["/v1/messages"].post.responses["503"]).toBeDefined();
   });
 
+  test("documents scoped key, sender, and managed-template control planes", () => {
+    expect(checkedInSpec.paths["/v1/api-keys"].post.security)
+      .toEqual([{ ProjectBearerKey: ["keys:write"] }]);
+    expect(checkedInSpec.paths["/v1/api-keys/{id}"].delete.responses["409"]).toBeDefined();
+    expect(checkedInSpec.paths["/v1/senders"].get.security)
+      .toEqual([{ ProjectBearerKey: ["senders:read"] }]);
+    expect(checkedInSpec.paths["/v1/senders/{alias}"].put.security)
+      .toEqual([{ ProjectBearerKey: ["senders:write"] }]);
+    expect(checkedInSpec.paths["/v1/templates"].get.security)
+      .toEqual([{ ProjectBearerKey: ["templates:read"] }]);
+    expect(
+      checkedInSpec.paths["/v1/templates/{name}/versions/{version}/activate"].post.security,
+    ).toEqual([{ ProjectBearerKey: ["templates:write"] }]);
+  });
+
   test("documents scoped signed webhook management and replay", () => {
     expect(checkedInSpec.paths["/v1/webhooks"].post.security)
       .toEqual([{ ProjectBearerKey: ["webhooks:write"] }]);

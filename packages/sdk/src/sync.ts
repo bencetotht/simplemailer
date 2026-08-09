@@ -7,7 +7,7 @@ import {
   type Template,
   type UpsertSender,
   type UpsertTemplate,
-} from "@simplemailer/contracts";
+} from "./contracts.js";
 import type { SimpleMailer } from "./client.js";
 
 export function defineMailer<const T extends MailerManifest>(manifest: T): T {
@@ -126,8 +126,8 @@ export async function planMailerSync(
   desired: ResolvedMailerDefinition,
 ): Promise<SyncPlan> {
   const [senders, templates] = await Promise.all([
-    client.senders.list(),
-    client.templates.list(),
+    desired.senders.length > 0 ? client.senders.list() : Promise.resolve([]),
+    desired.templates.length > 0 ? client.templates.list() : Promise.resolve([]),
   ]);
   return diffMailerDefinition(desired, { senders, templates });
 }

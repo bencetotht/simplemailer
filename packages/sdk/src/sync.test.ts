@@ -49,6 +49,9 @@ describe("declarative synchronization", () => {
       subject: "Welcome",
     };
     const digest = templateDigest(template);
+    expect(digest).toBe(
+      "8ee77f24ec3421433111c2526b95431198bdec9def4e2718e11d403725f714b8",
+    );
     const plan = diffMailerDefinition(
       {
         apiVersion: "simplemailer/v1",

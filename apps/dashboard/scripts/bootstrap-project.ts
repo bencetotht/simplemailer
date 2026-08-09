@@ -1,4 +1,5 @@
 import { prisma } from "database";
+import { apiKeyScopeSchema } from "@bencetotht/simplemailer/contracts";
 import { generateApiKey } from "../lib/api-keys";
 
 function required(name: string): string {
@@ -13,7 +14,8 @@ const keyName = process.env.SIMPLEMAILER_API_KEY_NAME?.trim() || "bootstrap";
 const scopes = (process.env.SIMPLEMAILER_API_KEY_SCOPES || "messages:send,messages:read")
   .split(",")
   .map((scope) => scope.trim())
-  .filter(Boolean);
+  .filter(Boolean)
+  .map((scope) => apiKeyScopeSchema.parse(scope));
 
 const project = await prisma.project.upsert({
   where: { slug },
