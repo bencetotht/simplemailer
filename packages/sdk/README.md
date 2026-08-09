@@ -1,4 +1,4 @@
-# `@bencetotht/simplemailer`
+# SimpleMailer SDK
 
 Server-side, ESM-only TypeScript SDK for SimpleMailer. It supports Node.js
 22–24 and has no framework dependency. It also exports the runtime Zod

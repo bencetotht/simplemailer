@@ -1,6 +1,6 @@
 {
   "name": "@bencetotht/simplemailer",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Type-safe, server-side SDK for the SimpleMailer API",
   "repository": {
     "type": "git",
