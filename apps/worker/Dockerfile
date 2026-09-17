@@ -26,6 +26,8 @@ RUN pnpm --filter database db:generate
 
 FROM base AS runner
 ENV NODE_ENV=production
+ARG VERSION=dev
+ENV SIMPLEMAILER_VERSION=$VERSION
 
 COPY --from=builder --chown=node:node /app/node_modules ./node_modules
 COPY --from=builder --chown=node:node /app/apps/worker ./apps/worker

@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "properties": {
+    "dashboard": {
+      "type": "object",
+      "required": ["enabled", "image"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image": { "$ref": "#/definitions/image" }
+      }
+    },
+    "worker": {
+      "type": "object",
+      "required": ["enabled", "image"],
+      "properties": {
+        "enabled": { "type": "boolean" },
+        "replicaCount": { "type": "integer", "minimum": 1 },
+        "image": { "$ref": "#/definitions/image" }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "properties": {
+        "existingSecret": { "type": "string" },
+        "create": { "type": "boolean" }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "properties": { "enabled": { "type": "boolean" } }
+    }
+  },
+  "definitions": {
+    "image": {
+      "type": "object",
+      "required": ["repository", "tag", "pullPolicy"],
+      "properties": {
+        "repository": { "type": "string", "minLength": 1 },
+        "tag": { "type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$" },
+        "pullPolicy": { "enum": ["Always", "IfNotPresent", "Never"] }
+      }
+    }
+  }
+}

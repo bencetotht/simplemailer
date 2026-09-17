@@ -72,6 +72,12 @@ pnpm build
 
 CI also applies the complete migration history to a fresh PostgreSQL database.
 
+## Kubernetes deployment
+
+The production Helm chart is in [`charts/simplemailer`](charts/simplemailer). It deploys only the dashboard/API and workers; PostgreSQL, RabbitMQ, and S3-compatible storage remain external. The chart supports existing Kubernetes Secrets, optional dashboard deployment, Prisma migration init containers, standard Ingress or Traefik `IngressRoute`, Prometheus Operator `ServiceMonitor`, autoscaling, disruption budgets, network policies, and observability sidecar/operator injection.
+
+See the [chart README](charts/simplemailer/README.md) for required connection values and installation examples. Release images and the OCI chart are published to GHCR by the selective `main` branch CD workflow described in [RELEASING.md](RELEASING.md).
+
 ## Template storage
 
 Production templates use AWS S3 by default. Set `S3_BUCKET` and `S3_REGION`; when running on AWS, leave the custom S3 credentials and endpoint unset so the standard AWS credential provider chain can use an ECS task role, EKS workload identity, EC2 instance profile, or local AWS profile.

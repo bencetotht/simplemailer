@@ -74,7 +74,7 @@ export function resolveConfig(): WorkerConfig {
     webhookDisableAfterFailures: parseNumber('WEBHOOK_DISABLE_AFTER_FAILURES', 10),
     smtpRejectUnauthorized: parseBoolean('SMTP_TLS_REJECT_UNAUTHORIZED', true),
     workerId,
-    workerVersion: '2.0.0',
+    workerVersion: process.env.SIMPLEMAILER_VERSION || '2.0.0',
   };
 }
 

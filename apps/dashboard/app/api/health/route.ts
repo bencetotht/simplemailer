@@ -19,6 +19,6 @@ export function GET() {
   return NextResponse.json({
     status: "ok",
     message: "SimpleMailer dashboard API is running",
-    version: "2.0.0",
+    version: process.env.SIMPLEMAILER_VERSION || "0.1.0",
   });
 }

@@ -1,4 +1,25 @@
-# SDK releases
+# Releases
+
+## Deployable components
+
+Every non-release push to `main` runs `.github/workflows/cd.yaml`. The workflow compares the pushed commits with the previous revision, runs `scripts/bump-versions.mjs`, commits only affected version files back to `main`, and then publishes:
+
+- `ghcr.io/bencetotht/simplemailer-dashboard:<semver>` for dashboard changes and changes to its shared database/SDK dependencies;
+- `ghcr.io/bencetotht/simplemailer-worker:<semver>` for worker changes and changes to its database dependency;
+- `oci://ghcr.io/bencetotht/charts/simplemailer` for chart changes or an image version update.
+
+Each artifact also gets a component-scoped GitHub release (`dashboard-vX.Y.Z`, `worker-vX.Y.Z`, or `helm-vX.Y.Z`) with generated release notes. Conventional commit `feat:` changes bump the minor version, `BREAKING CHANGE` or `type!:` changes bump the major version, and all other changes bump the patch version. A chart-only change never bumps or rebuilds an application image.
+
+The repository must allow GitHub Actions to write repository contents and packages. If `main` is protected, permit the GitHub Actions bot to push the version commit. GHCR packages inherit the repository/package visibility policy; mark each package public in its package settings after its first publication if it is not public automatically.
+
+Validate release selection locally with:
+
+```bash
+pnpm release:test
+node scripts/bump-versions.mjs --base HEAD^ --head HEAD
+```
+
+## SDK releases
 
 The only public npm package is:
 

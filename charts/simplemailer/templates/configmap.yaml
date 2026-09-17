@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "simplemailer.fullname" . }}-config
+  labels:
+    {{- include "simplemailer.labels" . | nindent 4 }}
+data:
+  RABBITMQ_API_URL: {{ .Values.dashboard.config.rabbitmqApiUrl | quote }}
+  S3_ENDPOINT: {{ coalesce .Values.dashboard.config.s3Endpoint .Values.worker.config.s3Endpoint "" | quote }}
+  S3_REGION: {{ coalesce .Values.dashboard.config.s3Region .Values.worker.config.s3Region "us-east-1" | quote }}
+  S3_BUCKET: {{ coalesce .Values.dashboard.config.s3Bucket .Values.worker.config.s3Bucket "" | quote }}
+  S3_FORCE_PATH_STYLE: {{ or .Values.dashboard.config.s3ForcePathStyle .Values.worker.config.s3ForcePathStyle | quote }}
+  S3_CREATE_BUCKET: {{ .Values.dashboard.config.s3CreateBucket | quote }}
+  TRUST_PROXY: {{ .Values.dashboard.config.trustProxy | quote }}
+  RABBITMQ_QUEUE: {{ .Values.worker.config.rabbitmqQueue | quote }}
+  TEMPLATE_PATH: {{ .Values.worker.config.templatePath | quote }}
+  PREFETCH_COUNT: {{ .Values.worker.config.prefetchCount | quote }}
+  MAX_RETRIES: {{ .Values.worker.config.maxRetries | quote }}
+  SMTP_TLS_REJECT_UNAUTHORIZED: {{ .Values.worker.config.smtpTlsRejectUnauthorized | quote }}
+  ENQUEUE_RECONCILER_INTERVAL_MS: {{ .Values.worker.config.enqueueReconcilerIntervalMs | quote }}
+  PROCESSING_LEASE_MS: {{ .Values.worker.config.processingLeaseMs | quote }}
+  WEBHOOK_DISPATCH_INTERVAL_MS: {{ .Values.worker.config.webhookDispatchIntervalMs | quote }}
+  WEBHOOK_REQUEST_TIMEOUT_MS: {{ .Values.worker.config.webhookRequestTimeoutMs | quote }}
+  WEBHOOK_LEASE_MS: {{ .Values.worker.config.webhookLeaseMs | quote }}
+  WEBHOOK_MAX_ATTEMPTS: {{ .Values.worker.config.webhookMaxAttempts | quote }}
+  WEBHOOK_DISABLE_AFTER_FAILURES: {{ .Values.worker.config.webhookDisableAfterFailures | quote }}

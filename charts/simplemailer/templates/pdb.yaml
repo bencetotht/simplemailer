@@ -1,0 +1,19 @@
+{{- range $component := list "dashboard" "worker" }}
+{{- $values := index $.Values $component }}
+{{- if and $values.enabled $values.podDisruptionBudget.enabled }}
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "simplemailer.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "simplemailer.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  minAvailable: {{ $values.podDisruptionBudget.minAvailable }}
+  selector:
+    matchLabels:
+      {{- include "simplemailer.selectorLabels" $ | nindent 6 }}
+      app.kubernetes.io/component: {{ $component }}
+---
+{{- end }}
+{{- end }}

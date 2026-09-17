@@ -31,6 +31,8 @@ RUN pnpm --filter dashboard build
 
 FROM base AS runner
 ENV NODE_ENV=production
+ARG VERSION=dev
+ENV SIMPLEMAILER_VERSION=$VERSION
 
 COPY --from=builder --chown=node:node /app/apps/dashboard/public ./apps/dashboard/public
 COPY --from=builder --chown=node:node /app/apps/dashboard/.next/standalone ./

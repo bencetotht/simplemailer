@@ -1,0 +1,31 @@
+{{- if and .Values.traefik.ingressRoute.enabled .Values.dashboard.enabled }}
+apiVersion: traefik.io/v1alpha1
+kind: IngressRoute
+metadata:
+  name: {{ include "simplemailer.fullname" . }}
+  labels:
+    {{- include "simplemailer.labels" . | nindent 4 }}
+  {{- with .Values.traefik.ingressRoute.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  entryPoints:
+    {{- toYaml .Values.traefik.ingressRoute.entryPoints | nindent 4 }}
+  routes:
+    {{- range .Values.traefik.ingressRoute.routes }}
+    - match: {{ .match | quote }}
+      kind: {{ .kind | default "Rule" }}
+      {{- with .middlewares }}
+      middlewares:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      services:
+        - name: {{ include "simplemailer.fullname" $ }}-dashboard
+          port: {{ $.Values.dashboard.service.port }}
+    {{- end }}
+  {{- with .Values.traefik.ingressRoute.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

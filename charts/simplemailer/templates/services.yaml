@@ -1,0 +1,49 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplemailer.fullname" . }}-dashboard
+  labels:
+    {{- include "simplemailer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+  {{- with .Values.dashboard.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.dashboard.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.dashboard.service.port }}
+      targetPort: http
+      protocol: TCP
+  selector:
+    {{- include "simplemailer.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+{{- end }}
+{{- if and .Values.dashboard.enabled .Values.worker.enabled }}
+---
+{{- end }}
+{{- if .Values.worker.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "simplemailer.fullname" . }}-worker
+  labels:
+    {{- include "simplemailer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+  {{- with .Values.worker.service.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.worker.service.type }}
+  ports:
+    - name: metrics
+      port: {{ .Values.worker.service.port }}
+      targetPort: metrics
+      protocol: TCP
+  selector:
+    {{- include "simplemailer.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: worker
+{{- end }}

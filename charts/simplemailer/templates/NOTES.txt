@@ -1,0 +1,14 @@
+SimpleMailer has been installed.
+
+{{- if and (not .Values.secrets.existingSecret) (not .Values.secrets.create) }}
+WARNING: no runtime Secret was configured. Create {{ include "simplemailer.secretName" . }}
+with DATABASE_URL, RABBITMQ_URL, and SECRETS_MASTER_KEY before the pods start.
+{{- end }}
+{{- if .Values.dashboard.enabled }}
+Dashboard service: {{ include "simplemailer.fullname" . }}-dashboard:{{ .Values.dashboard.service.port }}
+{{- else }}
+The dashboard/API is disabled.
+{{- end }}
+{{- if .Values.worker.enabled }}
+Worker metrics: {{ include "simplemailer.fullname" . }}-worker:{{ .Values.worker.service.port }}/metrics
+{{- end }}
