@@ -1,0 +1,128 @@
+{{- if .Values.dashboard.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "simplemailer.fullname" . }}-dashboard
+  labels:
+    {{- include "simplemailer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: dashboard
+spec:
+  {{- if not .Values.dashboard.autoscaling.enabled }}
+  replicas: {{ .Values.dashboard.replicaCount }}
+  {{- end }}
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      {{- include "simplemailer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: dashboard
+  template:
+    metadata:
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+        {{- if and .Values.secrets.create (not .Values.secrets.existingSecret) }}
+        checksum/secret: {{ include (print $.Template.BasePath "/secret.yaml") . | sha256sum }}
+        {{- end }}
+        {{- with (merge .Values.podAnnotations .Values.observability.podAnnotations) }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      labels:
+        {{- include "simplemailer.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: dashboard
+        {{- with .Values.podLabels }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+    spec:
+      serviceAccountName: {{ include "simplemailer.serviceAccountName" . }}
+      automountServiceAccountToken: {{ .Values.serviceAccount.automount }}
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        {{- toYaml .Values.dashboard.podSecurityContext | nindent 8 }}
+      {{- if .Values.migrations.enabled }}
+      initContainers:
+        - name: migrate
+          image: {{ include "simplemailer.image" .Values.worker.image }}
+          imagePullPolicy: {{ .Values.worker.image.pullPolicy }}
+          command: ["node", "packages/database/node_modules/prisma/build/index.js"]
+          args: ["migrate", "deploy", "--config", "packages/database/prisma/prisma.config.ts", "--schema", "packages/database/prisma/schema.prisma"]
+          env:
+            {{- include "simplemailer.secretEnv" (list . (dict "DATABASE_URL" "databaseUrl")) | nindent 12 }}
+          resources:
+            {{- toYaml .Values.migrations.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.migrations.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      {{- end }}
+      containers:
+        - name: dashboard
+          image: {{ include "simplemailer.image" .Values.dashboard.image }}
+          imagePullPolicy: {{ .Values.dashboard.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "simplemailer.fullname" . }}-config
+            {{- with .Values.dashboard.extraEnvFrom }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          env:
+            {{- include "simplemailer.secretEnv" (list . (dict "DATABASE_URL" "databaseUrl" "RABBITMQ_URL" "rabbitmqUrl" "SECRETS_MASTER_KEY" "secretsMasterKey" "DASHBOARD_API_KEY" "dashboardApiKey" "DASHBOARD_PASSWORD" "dashboardPassword" "DASHBOARD_SESSION_SECRET" "dashboardSessionSecret" "RABBITMQ_API_USER" "rabbitmqApiUser" "RABBITMQ_API_PASS" "rabbitmqApiPassword" "S3_ACCESS_KEY" "s3AccessKey" "S3_SECRET_KEY" "s3SecretKey" "S3_SESSION_TOKEN" "s3SessionToken")) | nindent 12 }}
+            {{- with .Values.dashboard.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            {{- toYaml .Values.dashboard.probes.liveness | nindent 12 }}
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: http
+            {{- toYaml .Values.dashboard.probes.readiness | nindent 12 }}
+          resources:
+            {{- toYaml .Values.dashboard.resources | nindent 12 }}
+          securityContext:
+            {{- toYaml .Values.dashboard.securityContext | nindent 12 }}
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+            - name: next-cache
+              mountPath: /app/apps/dashboard/.next/cache
+            {{- with .Values.dashboard.extraVolumeMounts }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+        {{- with .Values.dashboard.extraContainers }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      volumes:
+        - name: tmp
+          emptyDir: {}
+        - name: next-cache
+          emptyDir: {}
+        {{- with .Values.dashboard.extraVolumes }}
+        {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- with .Values.dashboard.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.dashboard.topologySpreadConstraints }}
+      topologySpreadConstraints:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

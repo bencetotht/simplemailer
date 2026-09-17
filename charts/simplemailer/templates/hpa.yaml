@@ -1,0 +1,29 @@
+{{- range $component := list "dashboard" "worker" }}
+{{- $values := index $.Values $component }}
+{{- if and $values.enabled $values.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ include "simplemailer.fullname" $ }}-{{ $component }}
+  labels:
+    {{- include "simplemailer.labels" $ | nindent 4 }}
+    app.kubernetes.io/component: {{ $component }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ include "simplemailer.fullname" $ }}-{{ $component }}
+  minReplicas: {{ $values.autoscaling.minReplicas }}
+  maxReplicas: {{ $values.autoscaling.maxReplicas }}
+  metrics:
+    {{- with $values.autoscaling.targetCPUUtilizationPercentage }}
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ . }}
+    {{- end }}
+---
+{{- end }}
+{{- end }}

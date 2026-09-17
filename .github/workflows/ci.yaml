@@ -30,6 +30,7 @@ jobs:
           node-version-file: .node-version
           cache: pnpm
       - run: pnpm install --frozen-lockfile
+      - run: pnpm release:test
       - run: pnpm db:generate
       - run: pnpm --filter dashboard openapi:generate
       - run: git diff --exit-code -- apps/dashboard/openapi.json
@@ -38,6 +39,16 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm package:smoke
+
+  delivery-artifacts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - run: helm lint charts/simplemailer
+      - run: helm template test charts/simplemailer > /tmp/simplemailer.yaml
+      - run: helm template test charts/simplemailer --set dashboard.enabled=false --set traefik.ingressRoute.enabled=true --set serviceMonitor.enabled=true > /tmp/simplemailer-crds.yaml
 
   migration-smoke-test:
     runs-on: ubuntu-latest

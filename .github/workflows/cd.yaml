@@ -1,0 +1,178 @@
+name: cd
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+
+concurrency:
+  group: cd-main
+  cancel-in-progress: false
+
+jobs:
+  version:
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip cd]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      dashboard: ${{ steps.bump.outputs.dashboard }}
+      dashboard_version: ${{ steps.bump.outputs.dashboard_version }}
+      worker: ${{ steps.bump.outputs.worker }}
+      worker_version: ${{ steps.bump.outputs.worker_version }}
+      helm: ${{ steps.bump.outputs.helm }}
+      helm_version: ${{ steps.bump.outputs.helm_version }}
+      release_sha: ${{ steps.commit.outputs.release_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Select affected components and bump semver
+        id: bump
+        env:
+          BEFORE: ${{ github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: node scripts/bump-versions.mjs --base "$BEFORE" --head "$HEAD_SHA" --write --github-output "$GITHUB_OUTPUT"
+      - name: Commit version files
+        id: commit
+        env:
+          AFFECTED: ${{ steps.bump.outputs.affected }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$AFFECTED" = "[]" ]; then
+            echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add apps/dashboard/package.json apps/worker/package.json charts/simplemailer/Chart.yaml charts/simplemailer/values.yaml
+          git commit -m "chore(release): bump ${AFFECTED} [skip cd]"
+          git push origin HEAD:main
+          echo "release_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  dashboard:
+    needs: version
+    if: ${{ needs.version.outputs.dashboard == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.release_sha }}
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish dashboard
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/dashboard/Dockerfile
+          push: true
+          build-args: VERSION=${{ needs.version.outputs.dashboard_version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/simplemailer-dashboard:${{ needs.version.outputs.dashboard_version }}
+            ghcr.io/${{ github.repository_owner }}/simplemailer-dashboard:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.version.outputs.release_sha }}
+            org.opencontainers.image.version=${{ needs.version.outputs.dashboard_version }}
+          cache-from: type=gha,scope=dashboard
+          cache-to: type=gha,mode=max,scope=dashboard
+      - name: Create dashboard release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.dashboard_version }}
+          RELEASE_SHA: ${{ needs.version.outputs.release_sha }}
+        shell: bash
+        run: |
+          previous=$(git tag --list 'dashboard-v*' --sort=-v:refname | head -n 1)
+          args=("dashboard-v${VERSION}" --target "$RELEASE_SHA" --title "Dashboard v${VERSION}" --generate-notes)
+          if [ -n "$previous" ]; then args+=(--notes-start-tag "$previous"); fi
+          gh release create "${args[@]}"
+
+  worker:
+    needs: version
+    if: ${{ needs.version.outputs.worker == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.release_sha }}
+          fetch-depth: 0
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and publish worker
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/worker/Dockerfile
+          push: true
+          build-args: VERSION=${{ needs.version.outputs.worker_version }}
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/simplemailer-worker:${{ needs.version.outputs.worker_version }}
+            ghcr.io/${{ github.repository_owner }}/simplemailer-worker:latest
+          labels: |
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ needs.version.outputs.release_sha }}
+            org.opencontainers.image.version=${{ needs.version.outputs.worker_version }}
+          cache-from: type=gha,scope=worker
+          cache-to: type=gha,mode=max,scope=worker
+      - name: Create worker release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.worker_version }}
+          RELEASE_SHA: ${{ needs.version.outputs.release_sha }}
+        shell: bash
+        run: |
+          previous=$(git tag --list 'worker-v*' --sort=-v:refname | head -n 1)
+          args=("worker-v${VERSION}" --target "$RELEASE_SHA" --title "Worker v${VERSION}" --generate-notes)
+          if [ -n "$previous" ]; then args+=(--notes-start-tag "$previous"); fi
+          gh release create "${args[@]}"
+
+  helm:
+    needs: [version, dashboard, worker]
+    if: ${{ always() && needs.version.result == 'success' && needs.version.outputs.helm == 'true' && (needs.dashboard.result == 'success' || needs.dashboard.result == 'skipped') && (needs.worker.result == 'success' || needs.worker.result == 'skipped') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.release_sha }}
+          fetch-depth: 0
+      - name: Lint and package chart
+        run: |
+          helm lint charts/simplemailer
+          helm package charts/simplemailer --destination dist
+      - name: Publish chart to GHCR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "$GH_TOKEN" | helm registry login ghcr.io --username "${{ github.actor }}" --password-stdin
+          helm push "dist/simplemailer-${{ needs.version.outputs.helm_version }}.tgz" "oci://ghcr.io/${{ github.repository_owner }}/charts"
+      - name: Create chart release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ needs.version.outputs.helm_version }}
+          RELEASE_SHA: ${{ needs.version.outputs.release_sha }}
+        shell: bash
+        run: |
+          previous=$(git tag --list 'helm-v*' --sort=-v:refname | head -n 1)
+          args=("helm-v${VERSION}" "dist/simplemailer-${VERSION}.tgz" --target "$RELEASE_SHA" --title "Helm chart v${VERSION}" --generate-notes)
+          if [ -n "$previous" ]; then args+=(--notes-start-tag "$previous"); fi
+          gh release create "${args[@]}"
