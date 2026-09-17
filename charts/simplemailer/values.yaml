@@ -49,7 +49,7 @@ dashboard:
   replicaCount: 2
   image:
     repository: ghcr.io/bencetotht/simplemailer-dashboard
-    tag: "0.2.1"
+    tag: "0.2.2"
     pullPolicy: IfNotPresent
   service:
     type: ClusterIP
