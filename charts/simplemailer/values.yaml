@@ -154,10 +154,37 @@ worker:
       initialDelaySeconds: 10
       periodSeconds: 10
   autoscaling:
-    enabled: false
+    enabled: true
     minReplicas: 2
     maxReplicas: 50
-    targetCPUUtilizationPercentage: 75
+    # Requires a metrics adapter that publishes this Prometheus gauge through
+    # the Kubernetes external.metrics.k8s.io API.
+    metrics:
+      - type: External
+        external:
+          metric:
+            name: mailer_autoscale_pressure
+          target:
+            type: Value
+            value: "1"
+    behavior:
+      scaleUp:
+        stabilizationWindowSeconds: 30
+        selectPolicy: Max
+        policies:
+          - type: Percent
+            value: 100
+            periodSeconds: 60
+          - type: Pods
+            value: 10
+            periodSeconds: 60
+      scaleDown:
+        stabilizationWindowSeconds: 300
+        selectPolicy: Min
+        policies:
+          - type: Percent
+            value: 20
+            periodSeconds: 60
   podDisruptionBudget:
     enabled: true
     minAvailable: 1
@@ -227,4 +254,3 @@ networkPolicy:
 # for your OpenTelemetry operator's sidecar/instrumentation injection.
 observability:
   podAnnotations: {}
-

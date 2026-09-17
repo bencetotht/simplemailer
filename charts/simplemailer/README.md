@@ -15,7 +15,8 @@ type: Opaque
 stringData:
   DATABASE_URL: postgresql://user:password@postgres.example:5432/simplemailer
   RABBITMQ_URL: amqps://user:password@rabbitmq.example:5671
-  SECRETS_MASTER_KEY: replace-with-at-least-32-random-bytes
+  # Generate with: openssl rand -base64 32
+  SECRETS_MASTER_KEY: replace-with-base64-encoded-32-byte-key
   DASHBOARD_API_KEY: replace-me
   DASHBOARD_PASSWORD: replace-me
   DASHBOARD_SESSION_SECRET: replace-with-an-independent-random-secret
@@ -57,6 +58,9 @@ For disposable development environments, set `secrets.create=true` and populate 
 | `ingress.enabled` | `false` | Create a standard Kubernetes Ingress. |
 | `traefik.ingressRoute.enabled` | `false` | Create a Traefik `IngressRoute` instead. |
 | `serviceMonitor.enabled` | `false` | Create a Prometheus Operator `ServiceMonitor` for workers. |
+| `worker.autoscaling.enabled` | `true` | Scale workers from queue pressure; always keeps at least two. |
+| `worker.autoscaling.minReplicas` | `2` | Minimum continuously running worker replicas. |
+| `worker.autoscaling.metrics` | external pressure metric | HPA v2 metric specification; replace if your adapter uses another name. |
 | `observability.podAnnotations` | `{}` | Common collector/operator injection annotations. |
 | `dashboard.extraContainers`, `worker.extraContainers` | `[]` | Add logging or telemetry sidecars. |
 | `networkPolicy.enabled` | `false` | Enable a caller-supplied ingress/egress policy. |
@@ -96,9 +100,55 @@ traefik:
 
 ## Monitoring and logs
 
-Workers expose `/metrics`, `/healthz`, `/readyz`, and `/autoscale` on port 9091. Enable `serviceMonitor` only when the Prometheus Operator CRD is present. The default HPA uses CPU because Kubernetes cannot consume the worker's Prometheus queue-pressure gauge without an external-metrics adapter.
+Workers expose `/metrics`, `/healthz`, `/readyz`, and `/autoscale` on port 9091. The Prometheus output includes `mailer_autoscale_pressure`, calculated from ready queue depth, retry backlog, in-flight work, and active workers. The worker HPA is enabled by default, targets that metric at `1`, scales between 2 and 50 replicas, scales up aggressively, and uses a five-minute scale-down stabilization window.
+
+Kubernetes does not consume Prometheus metrics directly. Install and configure a metrics adapter (for example, Prometheus Adapter or an equivalent managed-cloud adapter) so `mailer_autoscale_pressure` is available from `external.metrics.k8s.io`. The adapter and Prometheus remain external dependencies. Enable `serviceMonitor` only when the Prometheus Operator CRD is installed; otherwise configure your existing scraper against the worker service's `/metrics` endpoint. Until the external metric is available, the HPA reports an unavailable metric and leaves the Deployment at its existing replica count, which defaults to two.
+
+A Prometheus Adapter external rule can aggregate the identical cluster-pressure gauge exposed by each worker into the single value expected by the HPA:
+
+```yaml
+rules:
+  external:
+    - seriesQuery: 'mailer_autoscale_pressure{namespace!="",pod!=""}'
+      resources:
+        overrides:
+          namespace:
+            resource: namespace
+      name:
+        matches: ^mailer_autoscale_pressure$
+        as: mailer_autoscale_pressure
+      metricsQuery: 'max(<<.Series>>{<<.LabelMatchers>>})'
+```
+
+Confirm the adapter before relying on autoscaling:
+
+```bash
+kubectl get --raw '/apis/external.metrics.k8s.io/v1beta1/namespaces/simplemailer/mailer_autoscale_pressure'
+kubectl get hpa -n simplemailer
+```
 
 Both applications log to stdout/stderr, so a node-level OpenTelemetry Collector, Fluent Bit, or Vector daemon is the simplest export path. The applications do not currently emit OTLP natively. Use `observability.podAnnotations` for operator injection, or `extraContainers`, `extraVolumes`, and `extraVolumeMounts` for a sidecar required by your platform.
+
+## Secrets and initial access
+
+The chart requires these keys in `secrets.existingSecret`:
+
+| Key | Used by | Required |
+| --- | --- | --- |
+| `DATABASE_URL` | migrations, dashboard, worker | Yes |
+| `RABBITMQ_URL` | dashboard, worker | Yes |
+| `SECRETS_MASTER_KEY` | dashboard, worker | Yes in production; must be base64 that decodes to exactly 32 bytes (`openssl rand -base64 32`) |
+| `DASHBOARD_PASSWORD` | browser dashboard login | Yes when the dashboard is enabled in production |
+| `DASHBOARD_SESSION_SECRET` | dashboard session signing | Yes when the dashboard is enabled in production; generate independently |
+| `DASHBOARD_API_KEY` | legacy server-to-server API | Yes if legacy endpoints are used; recommended for production |
+| `RABBITMQ_API_USER` / `RABBITMQ_API_PASS` | dashboard queue statistics | Required only when those statistics are used |
+| `S3_ACCESS_KEY` / `S3_SECRET_KEY` / `S3_SESSION_TOKEN` | S3 template storage | Only when workload identity or the platform credential chain is not used |
+
+Database and RabbitMQ URLs frequently contain credentials and therefore stay in the Secret rather than the ConfigMap. Endpoint names, regions, bucket names, tuning settings, and ingress configuration are non-secret chart values.
+
+SMTP account logins are not global chart credentials. They are created through the dashboard/API and encrypted in PostgreSQL with `SECRETS_MASTER_KEY`. If accounts are seeded from a custom `config.yaml`, entries can reference environment variables such as `env:MAIL_ACCOUNT_PASSWORD`; inject those variables with `dashboard.extraEnv`/`worker.extraEnv` using `secretKeyRef`. The same pattern applies to per-bucket credentials in a seed file.
+
+SimpleMailer has no built-in root-user credential. `DASHBOARD_PASSWORD` is the operator login for the web dashboard. Project API keys are bootstrapped separately with the dashboard's `project:bootstrap` command from a trusted environment and are printed only once; they are not generated or retained by this chart.
 
 ## Security and networking
 

@@ -15,7 +15,14 @@ spec:
     name: {{ include "simplemailer.fullname" $ }}-{{ $component }}
   minReplicas: {{ $values.autoscaling.minReplicas }}
   maxReplicas: {{ $values.autoscaling.maxReplicas }}
+  {{- with $values.autoscaling.behavior }}
+  behavior:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
   metrics:
+    {{- with $values.autoscaling.metrics }}
+    {{- toYaml . | nindent 4 }}
+    {{- else }}
     {{- with $values.autoscaling.targetCPUUtilizationPercentage }}
     - type: Resource
       resource:
@@ -23,6 +30,7 @@ spec:
         target:
           type: Utilization
           averageUtilization: {{ . }}
+    {{- end }}
     {{- end }}
 ---
 {{- end }}
