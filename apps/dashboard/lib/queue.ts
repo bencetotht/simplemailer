@@ -7,6 +7,15 @@ const MAIN_ROUTING_KEY = "mail.send";
 
 const RABBITMQ_URL = process.env.RABBITMQ_URL || "amqp://localhost:5672";
 const RABBITMQ_API_URL = process.env.RABBITMQ_API_URL || "http://localhost:15672";
+const RABBITMQ_VHOST = (() => {
+  if (process.env.RABBITMQ_VHOST) return process.env.RABBITMQ_VHOST;
+  try {
+    const pathname = new URL(RABBITMQ_URL).pathname.slice(1);
+    return pathname ? decodeURIComponent(pathname) : "/";
+  } catch {
+    return "/";
+  }
+})();
 
 let channelPromise: Promise<amqp.ConfirmChannel> | null = null;
 
@@ -140,7 +149,8 @@ export async function getQueueMessages(
   limit = 10,
 ): Promise<Record<string, unknown>[]> {
   try {
-    const response = await fetch(`${RABBITMQ_API_URL}/api/queues/%2f/${queue}/get`, {
+    const vhost = encodeURIComponent(RABBITMQ_VHOST);
+    const response = await fetch(`${RABBITMQ_API_URL}/api/queues/${vhost}/${queue}/get`, {
       method: "POST",
       headers: {
         Authorization: getRabbitApiAuthHeader(),
