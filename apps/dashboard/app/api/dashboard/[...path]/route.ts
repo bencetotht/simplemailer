@@ -7,6 +7,10 @@ import {
 } from "@/lib/dashboard-session";
 import { apiError } from "@/lib/http";
 
+const DASHBOARD_INTERNAL_API_URL =
+  process.env.DASHBOARD_INTERNAL_API_URL ||
+  `http://127.0.0.1:${process.env.PORT || "3000"}`;
+
 async function proxy(
   request: NextRequest,
   context: { params: Promise<{ path: string[] }> },
@@ -48,7 +52,7 @@ async function proxy(
   const { path } = await context.params;
   const target = new URL(
     `/api/${path.map(encodeURIComponent).join("/")}${request.nextUrl.search}`,
-    request.nextUrl.origin,
+    DASHBOARD_INTERNAL_API_URL,
   );
   const headers = new Headers(request.headers);
   headers.delete("cookie");
